@@ -1,0 +1,84 @@
+{
+    "name": "fb-otp-generator",
+    "version": "0.1.0",
+    "main": "main.js",
+    "private": true,
+    "scripts": {
+        "dev": "concurrently \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
+        "build:web": "next build",
+        "build:app": "npm run build:web && electron-builder --win --x64 --dir",
+        "pack:installer": "electron-builder --win --x64 --publish never",
+        "start": "electron .",
+        "lint": "next lint"
+    },
+    "build": {
+        "appId": "com.fb-otp-generator.app",
+        "productName": "FB OTP Generator",
+        "directories": {
+            "output": "dist"
+        },
+        "npmRebuild": false,
+        "buildDependenciesFromSource": false,
+        "forceCodeSigning": false,
+        "files": [
+            "main.js",
+            "preload.js",
+            "out/**/*",
+            "package.json",
+            "!node_modules/@img/**/*",
+            "!node_modules/sharp/**/*"
+        ],
+        "asarUnpack": [
+            "!**/@img/**",
+            "!**/sharp/**"
+        ],
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true,
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true,
+            "shortcutName": "FB OTP Generator"
+        },
+        "win": {
+            "target": "nsis",
+            "artifactName": "${productName}-${version}-Setup.${ext}"
+        },
+        "mac": {
+            "target": [
+                "dmg"
+            ]
+        },
+        "linux": {
+            "target": [
+                "AppImage"
+            ],
+            "category": "Utility"
+        }
+    },
+    "dependencies": {
+        "@emotion/react": "^11.14.0",
+        "@emotion/styled": "^11.14.0",
+        "@mui/icons-material": "^7.3.4",
+        "@mui/material": "^7.3.4",
+        "electron-serve": "^3.0.0",
+        "next": "15.5.4",
+        "react": "19.1.0",
+        "react-dom": "19.1.0",
+        "react-icons": "^5.5.0",
+        "react-toastify": "^11.0.5",
+        "simplebar-react": "^3.3.2"
+    },
+    "devDependencies": {
+        "@eslint/eslintrc": "^3",
+        "@types/node": "^20",
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "concurrently": "^9.2.1",
+        "electron": "^38.2.2",
+        "electron-builder": "^26.0.12",
+        "eslint": "^9",
+        "eslint-config-next": "15.5.4",
+        "typescript": "^5",
+        "wait-on": "^9.0.1"
+    }
+}
