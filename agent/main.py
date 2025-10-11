@@ -22,6 +22,7 @@ class FacebookNumberChecker:
         self.driver = None
         self.wait = None
         self.current_phone_number = None
+        self.continuation = True
 
     def setup_driver(self):
         options = uc.ChromeOptions()
@@ -139,9 +140,11 @@ class FacebookNumberChecker:
         pass
 
     def on_disabled(self):
-        pass
+        self.continuation = False
+        logger.info("Account is disabled")
 
     def on_verification_send(self):
+        self.continuation = False
         logger.info("Verification code input page reached")
 
 
@@ -154,8 +157,7 @@ class FacebookNumberChecker:
                 "Account disabled": self.on_disabled,
             }
 
-            max_iterations = 3
-            for i in range(max_iterations):
+            while self.continuation:
                 found_text = self.wait_for_text_and_execute(text_actions)
 
                 if not found_text:
