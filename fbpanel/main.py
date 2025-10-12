@@ -1,12 +1,14 @@
-import undetected_chromedriver as uc
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import time
 import logging
 from PIL import Image
 from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+from datetime import datetime
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,27 +17,123 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Global lock to prevent concurrent driver initialization
+_driver_init_lock = threading.Lock()
+
+# ============================================
+# EXPIRATION CONFIGURATION
+# ============================================
+# Set the expiration date (YYYY, MM, DD, HH, MM, SS)
+# After this date, the software will stop working for all users
+# EXPIRATION_DATE = datetime(2025, 10, 17, 23, 59, 59)  # Expires on October 17, 2025 at 11:59:59 PM
+EXPIRATION_DATE = datetime(2025, 10, 19, 23, 59, 59)  # Expires on October 17, 2025 at 11:59:59 PM
+
+# Set to None to disable expiration
+# EXPIRATION_DATE = None
+# ============================================
+
+class ExpirationChecker:
+    """Handles software expiration logic"""
+
+    @staticmethod
+    def check_expiration():
+        """Check if software has expired. Returns (expired, message)"""
+
+        # If no expiration date is set, return not expired
+        if EXPIRATION_DATE is None:
+            return False, "No expiration set"
+
+        # Check if current date is past expiration date
+        now = datetime.now()
+        if now > EXPIRATION_DATE:
+            days_expired = (now - EXPIRATION_DATE).days
+            return True, f"This software expired on {EXPIRATION_DATE.strftime('%B %d, %Y')} ({days_expired} days ago)"
+        else:
+            days_remaining = (EXPIRATION_DATE - now).days
+            hours_remaining = int((EXPIRATION_DATE - now).seconds / 3600)
+
+            # Warn if expiring soon
+            if days_remaining <= 3:
+                logger.warning(f"Software will expire in {days_remaining} days and {hours_remaining} hours!")
+
+            return False, f"Software expires on {EXPIRATION_DATE.strftime('%B %d, %Y at %I:%M %p')}"
+
 
 class FacebookNumberChecker:
-    def __init__(self, headless=False, wait_timeout=10):
+    def __init__(self, headless=False, wait_timeout=30):  # Reduced from 60 to 30 seconds
+        # Check expiration before initializing
+        expired, message = ExpirationChecker.check_expiration()
+        if expired:
+            raise Exception(f"SOFTWARE EXPIRED: {message}")
+
+        logger.info(f"Expiration status: {message}")
+
         self.headless = headless
         self.wait_timeout = wait_timeout
         self.driver = None
         self.wait = None
         self.current_phone_number = None
         self.continuation = True
+        self.reached_success = False  # Track if verification page was reached
+        self.error_message = None  # Track specific error message
 
     def setup_driver(self):
-        options = uc.ChromeOptions()
-        options.headless = self.headless
-        self.driver = uc.Chrome(options=options)
-        self.wait = WebDriverWait(self.driver, self.wait_timeout)
+        # Double-check expiration before setup
+        expired, message = ExpirationChecker.check_expiration()
+        if expired:
+            raise Exception(f"SOFTWARE EXPIRED: {message}")
+
+        options = Options()
+
+        # Set headless mode properly
+        if self.headless:
+            options.add_argument('--headless=new')  # Use new headless mode for better performance
+
+        # Performance optimizations
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-gpu')
+        options.add_argument('--disable-extensions')
+        options.add_argument('--disable-plugins')
+        options.add_argument('--disable-popup-blocking')
+        options.add_argument('--disable-notifications')
+        options.add_argument('--disable-infobars')
+        options.add_argument('--disable-logging')
+        options.add_argument('--log-level=3')
+        options.add_argument('--silent')
+        options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation'])
+        options.add_experimental_option('useAutomationExtension', False)
+
+        # Set page load strategy to 'eager' - don't wait for all resources
+        options.page_load_strategy = 'eager'
+
+        # Disable images and other unnecessary resources via preferences
+        prefs = {
+            'profile.default_content_setting_values': {
+                'images': 2,  # Disable images - major speedup
+                'plugins': 2,
+                'popups': 2,
+                'geolocation': 2,
+                'notifications': 2,
+                'media_stream': 2,
+            },
+            'profile.managed_default_content_settings.images': 2
+        }
+        options.add_experimental_option('prefs', prefs)
+
+        # Use lock to prevent concurrent driver initialization
+        with _driver_init_lock:
+            self.driver = webdriver.Chrome(options=options)
+
+        # Reduced wait timeout and faster polling
+        self.wait = WebDriverWait(self.driver, self.wait_timeout, poll_frequency=0.3)  # Poll every 0.3s instead of default 0.5s
 
         width = 1200
         height = int(width * 9 / 16)
         self.driver.set_window_size(width, height)
 
-        logger.info(f"Browser initialized with size: {width}x{height}")
+        logger.info(f"Browser initialized (headless={self.headless}) with size: {width}x{height}")
 
     def wait_for_text_and_execute(self, text_actions_map):
         """
@@ -85,8 +183,6 @@ class FacebookNumberChecker:
         email_input.clear()
         email_input.send_keys(phone_number)
 
-        time.sleep(0.5)  # Mimic human behavior
-
         search_button = self.wait.until(
             EC.element_to_be_clickable((By.ID, "did_submit"))
         )
@@ -97,14 +193,11 @@ class FacebookNumberChecker:
         first_account_link = self.wait.until(
             EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'This is my account')]"))
         )
-        time.sleep(0.5)  # Mimic human behavior
         first_account_link.click()
         logger.info("First account selected")
 
     def continue_send_code(self):
         phone_to_match = ''.join(filter(str.isdigit, self.current_phone_number))
-
-        time.sleep(1)
 
         all_radios = self.wait.until(
             EC.presence_of_all_elements_located((By.XPATH, "//input[@type='radio' and @name='recover_method']"))
@@ -141,43 +234,16 @@ class FacebookNumberChecker:
                 logger.debug(f"Error processing radio button: {e}")
                 continue
 
-        # Fallback: if exact match not found, try to find any SMS option with full unmasked number
         if not sms_radio_to_click:
-            for radio in all_radios:
-                try:
-                    radio_id = radio.get_attribute('id')
-                    if radio_id and radio_id.startswith('send_sms:'):
-                        label = self.driver.find_element(By.XPATH, f"//label[@for='{radio_id}']")
-                        label_text = label.text
-
-                        # Prefer options without asterisks (unmasked numbers)
-                        if "Send code via SMS" in label_text and '*' not in label_text:
-                            sms_radio_to_click = radio
-                            break
-                except Exception as e:
-                    continue
-
-        # Last fallback: any SMS option
-        if not sms_radio_to_click:
-            for radio in all_radios:
-                try:
-                    radio_id = radio.get_attribute('id')
-                    if radio_id and radio_id.startswith('send_sms:'):
-                        label = self.driver.find_element(By.XPATH, f"//label[@for='{radio_id}']")
-                        if "Send code via SMS" in label.text:
-                            sms_radio_to_click = radio
-                            break
-                except Exception as e:
-                    continue
-
-        if not sms_radio_to_click:
-            raise Exception("Could not find 'Send code via SMS' option")
+            # No SMS option found - set error and stop
+            self.continuation = False
+            self.error_message = "Can't find the 'Send code via SMS' option."
+            logger.info("SMS verification option not available for this account")
+            return
 
         if not sms_radio_to_click.is_selected():
             sms_radio_to_click.click()
             logger.info("SMS radio button clicked")
-
-        time.sleep(0.5)
 
         continue_button = self.wait.until(
             EC.element_to_be_clickable((By.XPATH, "//button[@name='reset_action' and @type='submit' and contains(text(), 'Continue')]"))
@@ -190,25 +256,83 @@ class FacebookNumberChecker:
 
     def on_disabled(self):
         self.continuation = False
+        self.error_message = "Account is disabled"
         logger.info("Account is disabled")
 
     def on_verification_send(self):
         self.continuation = False
+        self.reached_success = True  # Set flag when verification code page is reached
         logger.info("Verification code input page reached")
 
     def no_search_results(self):
         self.continuation = False
-        logger.info("No search results found for the phone number")
+        self.error_message = "Facebook account isn't found"
+        logger.info("Facebook account isn't found")
 
+    def on_robot_detected(self):
+        self.continuation = False
+        self.error_message = "Robot detected - CAPTCHA required"
+        logger.info("Robot detected")
+
+    def try_another_way(self):
+        try:
+            try_another_way_button = self.wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//a[@name='tryanotherway' and contains(text(), 'Try another way')]"))
+            )
+            try_another_way_button.click()
+            logger.info("Clicked 'Try another way' button")
+        except Exception as e:
+            logger.error(f"Error clicking 'Try another way' button: {e}")
+            # Try alternative selector
+            try:
+                try_another_way_button = self.wait.until(
+                    EC.element_to_be_clickable((By.NAME, "tryanotherway"))
+                )
+                try_another_way_button.click()
+                logger.info("Clicked 'Try another way' button using alternative selector")
+            except Exception as e2:
+                logger.error(f"Failed with alternative selector too: {e2}")
+                raise
+
+    def reload_page(self):
+        self.driver.refresh()
+
+    def direct_code_send(self):
+        """Handle the case where Facebook directly offers to send a code to the phone number"""
+        try:
+            # Click the Continue button to send the verification code
+            continue_button = self.wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//button[@type='submit' and contains(text(), 'Continue')]"))
+            )
+            continue_button.click()
+            logger.info("Clicked Continue button to send verification code directly")
+        except Exception as e:
+            logger.error(f"Error clicking Continue button: {e}")
+            # Try alternative selector
+            try:
+                continue_button = self.wait.until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[@type='submit']"))
+                )
+                continue_button.click()
+                logger.info("Clicked Continue button using alternative selector")
+            except Exception as e2:
+                logger.error(f"Failed with alternative selector too: {e2}")
+                raise
 
     def handle_continuation(self):
         try:
             text_actions = {
                 "These accounts matched your search": self.select_account,
                 "How do you want to receive the code to reset your password?": self.continue_send_code,
+                "How do you want to get the code to reset your password?": self.continue_send_code,
+                "Before we send the code, enter these letters and numbers": self.on_robot_detected,
                 "Enter security code": self.on_verification_send,
                 "Account disabled": self.on_disabled,
                 "No search results": self.no_search_results,
+                "Log in as": self.try_another_way,
+                "Log in to": self.try_another_way,
+                "Reload page": self.reload_page,
+                "We can send a login code to:": self.direct_code_send,
             }
 
             while self.continuation:
@@ -249,12 +373,28 @@ class FacebookNumberChecker:
         try:
             self.search_phone_number(phone_number)
             self.handle_continuation()
-            time.sleep(2)
-            return {
-                'phone': phone_number,
-                'status': 'success',
-                'message': 'Check completed'
-            }
+
+            # Check if verification page was reached successfully
+            if self.reached_success:
+                return {
+                    'phone': phone_number,
+                    'status': 'success',
+                    'message': 'Verification code page reached'
+                }
+            # If we have a specific error message, return it
+            elif self.error_message:
+                return {
+                    'phone': phone_number,
+                    'status': 'failed',
+                    'message': self.error_message
+                }
+            # Otherwise, return unknown error
+            else:
+                return {
+                    'phone': phone_number,
+                    'status': 'failed',
+                    'message': 'Unknown error - didn\'t reach verification page'
+                }
         except Exception as e:
             logger.error(f"Error checking {phone_number}: {e}")
             return {
@@ -311,7 +451,7 @@ if __name__ == "__main__":
 
     logger.info(f"Starting to check {len(nums)} phone numbers with 5 concurrent workers")
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=20) as executor:
         # Submit all tasks
         future_to_phone = {executor.submit(check_single_number, phone): phone for phone in nums}
 
