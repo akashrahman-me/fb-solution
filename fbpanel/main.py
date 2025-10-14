@@ -9,6 +9,7 @@ from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 from datetime import datetime
+import json
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,6 +20,14 @@ logger = logging.getLogger(__name__)
 
 # Global lock to prevent concurrent driver initialization
 _driver_init_lock = threading.Lock()
+
+# Global bandwidth tracking
+_total_bandwidth_lock = threading.Lock()
+_global_bandwidth_stats = {
+    'total_sent': 0,
+    'total_received': 0,
+    'total_requests': 0
+}
 
 # ============================================
 # EXPIRATION CONFIGURATION
@@ -77,6 +86,13 @@ class FacebookNumberChecker:
         self.reached_success = False  # Track if verification page was reached
         self.error_message = None  # Track specific error message
 
+        # Bandwidth tracking for this instance
+        self.bandwidth_stats = {
+            'bytes_sent': 0,
+            'bytes_received': 0,
+            'requests_count': 0
+        }
+
     def setup_driver(self):
         # Double-check expiration before setup
         expired, message = ExpirationChecker.check_expiration()
@@ -99,7 +115,8 @@ class FacebookNumberChecker:
         options.add_argument('--disable-popup-blocking')
         options.add_argument('--disable-notifications')
         options.add_argument('--disable-infobars')
-        options.add_argument('--disable-logging')
+        # Don't disable logging completely - we need performance logs
+        # options.add_argument('--disable-logging')
         options.add_argument('--log-level=3')
         options.add_argument('--silent')
         options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation'])
@@ -122,9 +139,15 @@ class FacebookNumberChecker:
         }
         options.add_experimental_option('prefs', prefs)
 
+        # Enable performance logging to capture network data
+        options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
+
         # Use lock to prevent concurrent driver initialization
         with _driver_init_lock:
             self.driver = webdriver.Chrome(options=options)
+
+        # Enable Performance logging to track network activity
+        self.driver.execute_cdp_cmd('Network.enable', {})
 
         # Reduced wait timeout and faster polling
         self.wait = WebDriverWait(self.driver, self.wait_timeout, poll_frequency=0.3)  # Poll every 0.3s instead of default 0.5s
@@ -134,6 +157,86 @@ class FacebookNumberChecker:
         self.driver.set_window_size(width, height)
 
         logger.info(f"Browser initialized (headless={self.headless}) with size: {width}x{height}")
+
+    def get_network_stats(self):
+        """Retrieve network statistics from Chrome DevTools Protocol"""
+        try:
+            # Get performance metrics
+            metrics = self.driver.execute_cdp_cmd('Performance.getMetrics', {})
+
+            # Get network data from performance logs
+            logs = self.driver.get_log('performance')
+
+            bytes_sent = 0
+            bytes_received = 0
+            request_count = 0
+
+            for entry in logs:
+                try:
+                    log_message = json.loads(entry['message'])
+                    message = log_message.get('message', {})
+                    method = message.get('method', '')
+
+                    # Track response received events
+                    if method == 'Network.responseReceived':
+                        params = message.get('params', {})
+                        response = params.get('response', {})
+
+                        # Get encoded data length (compressed size) or use content length
+                        encoded_length = response.get('encodedDataLength', 0)
+
+                        if encoded_length > 0:
+                            bytes_received += encoded_length
+                            request_count += 1
+
+                    # Track request will be sent events (for upload size)
+                    elif method == 'Network.requestWillBeSent':
+                        params = message.get('params', {})
+                        request = params.get('request', {})
+
+                        # Estimate request size from headers and post data
+                        headers = request.get('headers', {})
+                        post_data = request.get('postData', '')
+
+                        # Rough estimate of request size
+                        header_size = sum(len(str(k)) + len(str(v)) for k, v in headers.items())
+                        post_data_size = len(post_data) if post_data else 0
+
+                        bytes_sent += header_size + post_data_size
+
+                except Exception as e:
+                    # Skip problematic log entries
+                    continue
+
+            return {
+                'bytes_sent': bytes_sent,
+                'bytes_received': bytes_received,
+                'requests_count': request_count
+            }
+
+        except Exception as e:
+            logger.debug(f"Could not retrieve network stats: {e}")
+            return {
+                'bytes_sent': 0,
+                'bytes_received': 0,
+                'requests_count': 0
+            }
+
+    def update_bandwidth_stats(self):
+        """Update bandwidth statistics for this checker instance"""
+        stats = self.get_network_stats()
+        self.bandwidth_stats['bytes_sent'] += stats['bytes_sent']
+        self.bandwidth_stats['bytes_received'] += stats['bytes_received']
+        self.bandwidth_stats['requests_count'] += stats['requests_count']
+
+    @staticmethod
+    def format_bytes(bytes_value):
+        """Convert bytes to human-readable format"""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if bytes_value < 1024.0:
+                return f"{bytes_value:.2f} {unit}"
+            bytes_value /= 1024.0
+        return f"{bytes_value:.2f} TB"
 
     def wait_for_text_and_execute(self, text_actions_map):
         """
@@ -363,6 +466,22 @@ class FacebookNumberChecker:
 
     def close(self):
         if self.driver:
+            # Get final bandwidth statistics before closing
+            self.update_bandwidth_stats()
+
+            # Log per-session bandwidth usage
+            total_bandwidth = self.bandwidth_stats['bytes_sent'] + self.bandwidth_stats['bytes_received']
+            logger.info(f"Bandwidth for this check: Sent={self.format_bytes(self.bandwidth_stats['bytes_sent'])}, "
+                       f"Received={self.format_bytes(self.bandwidth_stats['bytes_received'])}, "
+                       f"Total={self.format_bytes(total_bandwidth)}, "
+                       f"Requests={self.bandwidth_stats['requests_count']}")
+
+            # Update global bandwidth statistics
+            with _total_bandwidth_lock:
+                _global_bandwidth_stats['total_sent'] += self.bandwidth_stats['bytes_sent']
+                _global_bandwidth_stats['total_received'] += self.bandwidth_stats['bytes_received']
+                _global_bandwidth_stats['total_requests'] += self.bandwidth_stats['requests_count']
+
             self.driver.quit()
             logger.info("Browser closed")
 
@@ -408,7 +527,7 @@ def check_single_number(phone_number):
     """
     Worker function to check a single phone number
     """
-    checker = FacebookNumberChecker(headless=True)
+    checker = FacebookNumberChecker(headless=False)
     try:
         checker.setup_driver()
         result = checker.check_number(phone_number)
@@ -426,32 +545,36 @@ def check_single_number(phone_number):
 
 
 if __name__ == "__main__":
+    #
+    # nums = [
+    #     "2250708139166", "2250708135432", "2250708136329", "2250708137946", "2250708130149", "2250708132325",
+    #     "2250708134921", "2250708131254", "2250708135326", "2250708136921", "2250708138627", "2250708136804",
+    #     "2250708133468", "2250708130814", "2250708132680", "2250708131009", "2250708136508", "2250708135640",
+    #     "2250708136254", "2250708137888", "2250708130404", "2250708132032", "2250708135700", "2250708136514",
+    #     "2250708133330", "2250708137507", "2250708131688", "2250708132191", "2250708134184", "2250708135392",
+    #     "2250708135811", "2250708131936", "2250708138942", "2250708130543", "2250708134441", "2250708139822",
+    #     "2250708133494", "2250708131958", "2250708130684", "2250708136616", "2250708130337", "2250708131019",
+    #     "2250708130369", "2250708137183", "2250708130469", "2250708134024", "2250708133098", "2250708135786",
+    #     "2250708131322", "2250708138204", "2250708139499", "2250708138352", "2250708134979", "2250708139512",
+    #     "2250708132538", "2250708136979", "2250708136863", "2250708136665", "2250708131689", "2250708138575",
+    #     "2250708134924", "2250708130984", "2250708138875", "2250708131727", "2250708136283", "2250708132332",
+    #     "2250708132646", "2250708135113", "2250708139954", "2250708132201", "2250708136558", "2250708134414",
+    #     "2250708131519", "2250708135538", "2250708130197", "2250708131851", "2250708133530", "2250708130279",
+    #     "2250708132252", "2250708135809", "2250708138185", "2250708138513", "2250708139799", "2250708130520",
+    #     "2250708138986", "2250708133287", "2250708134147", "2250708131345", "2250708131565", "2250708132120",
+    #     "2250708131610", "2250708132501", "2250708139948", "2250708138734", "2250708136500", "2250708130826",
+    #     "2250708138855", "2250708139632", "2250708136711", "2250708136905"
+    # ]
 
     nums = [
-        "2250708139166", "2250708135432", "2250708136329", "2250708137946", "2250708130149", "2250708132325",
-        "2250708134921", "2250708131254", "2250708135326", "2250708136921", "2250708138627", "2250708136804",
-        "2250708133468", "2250708130814", "2250708132680", "2250708131009", "2250708136508", "2250708135640",
-        "2250708136254", "2250708137888", "2250708130404", "2250708132032", "2250708135700", "2250708136514",
-        "2250708133330", "2250708137507", "2250708131688", "2250708132191", "2250708134184", "2250708135392",
-        "2250708135811", "2250708131936", "2250708138942", "2250708130543", "2250708134441", "2250708139822",
-        "2250708133494", "2250708131958", "2250708130684", "2250708136616", "2250708130337", "2250708131019",
-        "2250708130369", "2250708137183", "2250708130469", "2250708134024", "2250708133098", "2250708135786",
-        "2250708131322", "2250708138204", "2250708139499", "2250708138352", "2250708134979", "2250708139512",
-        "2250708132538", "2250708136979", "2250708136863", "2250708136665", "2250708131689", "2250708138575",
-        "2250708134924", "2250708130984", "2250708138875", "2250708131727", "2250708136283", "2250708132332",
-        "2250708132646", "2250708135113", "2250708139954", "2250708132201", "2250708136558", "2250708134414",
-        "2250708131519", "2250708135538", "2250708130197", "2250708131851", "2250708133530", "2250708130279",
-        "2250708132252", "2250708135809", "2250708138185", "2250708138513", "2250708139799", "2250708130520",
-        "2250708138986", "2250708133287", "2250708134147", "2250708131345", "2250708131565", "2250708132120",
-        "2250708131610", "2250708132501", "2250708139948", "2250708138734", "2250708136500", "2250708130826",
-        "2250708138855", "2250708139632", "2250708136711", "2250708136905"
+        "2250708139166"
     ]
 
     results = []
 
     logger.info(f"Starting to check {len(nums)} phone numbers with 5 concurrent workers")
 
-    with ThreadPoolExecutor(max_workers=20) as executor:
+    with ThreadPoolExecutor(max_workers=1) as executor:
         # Submit all tasks
         future_to_phone = {executor.submit(check_single_number, phone): phone for phone in nums}
 
@@ -485,5 +608,23 @@ if __name__ == "__main__":
     logger.info("\nDetailed results:")
     for result in results:
         logger.info(f"{result['phone']}: {result['status']} - {result['message']}")
+
+    # Print total bandwidth usage
+    logger.info("=" * 50)
+    logger.info("TOTAL BANDWIDTH USAGE:")
+    logger.info("=" * 50)
+    total_sent = _global_bandwidth_stats['total_sent']
+    total_received = _global_bandwidth_stats['total_received']
+    total_bandwidth = total_sent + total_received
+    total_requests = _global_bandwidth_stats['total_requests']
+
+    logger.info(f"Total Sent: {FacebookNumberChecker.format_bytes(total_sent)}")
+    logger.info(f"Total Received: {FacebookNumberChecker.format_bytes(total_received)}")
+    logger.info(f"Total Bandwidth: {FacebookNumberChecker.format_bytes(total_bandwidth)}")
+    logger.info(f"Total Requests: {total_requests}")
+
+    if len(results) > 0:
+        avg_bandwidth_per_check = total_bandwidth / len(results)
+        logger.info(f"Average Bandwidth per Check: {FacebookNumberChecker.format_bytes(avg_bandwidth_per_check)}")
 
     logger.info("=" * 50)

@@ -3,5 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="Python 3.13 (agent)" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.13 virtualenv at C:\WORKSHOP\PRODUCTION\fbpanel\.venv" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.13 virtualenv at C:\WORKSHOP\PRODUCTION\fb-solution\fbpanel\.venv" project-jdk-type="Python SDK" />
 </project>
