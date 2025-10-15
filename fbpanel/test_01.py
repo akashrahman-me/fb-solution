@@ -1,26 +1,20 @@
-import requests
-import json
+from seleniumwire import webdriver
+from selenium.webdriver.chrome.options import Options
 
-def test_proxy():
-    """Test the proxy configuration"""
-    proxy = {
-        "http": "http://user-akash_sAIls-country-US:83QcuHmvdK8_yrv@dc.oxylabs.io:8000",
-        "https": "http://user-akash_sAIls-country-US:83QcuHmvdK8_yrv@dc.oxylabs.io:8000"
+proxy = "http://user-akash_sAIls-country-US:83QcuHmvdK8_yrv@dc.oxylabs.io:8000"
+
+seleniumwire_options = {
+    'proxy': {
+        'http': proxy,
+        'https': proxy,
+        'no_proxy': 'localhost,127.0.0.1'
     }
-    url = "https://ip.oxylabs.io/location"
+}
 
-    try:
-        print("Testing proxy connection...")
-        response = requests.get(url, proxies=proxy, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        print("\n✓ Proxy is working!")
-        print("\nYour IP Location Info:")
-        print(json.dumps(data, indent=4))
-        return True
-    except requests.exceptions.RequestException as e:
-        print(f"\n✗ Proxy connection failed: {e}")
-        return False
+opts = Options()
+# add any chrome args you need, e.g. opts.add_argument('--disable-gpu')
+driver = webdriver.Chrome(options=opts, seleniumwire_options=seleniumwire_options)
 
-if __name__ == "__main__":
-    test_proxy()
+driver.get('https://api.ipify.org?format=json')   # quick IP check
+print(driver.page_source)
+driver.quit()

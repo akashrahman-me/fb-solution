@@ -1,8 +1,11 @@
+import time
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import logging
 from PIL import Image
 from io import BytesIO
@@ -18,8 +21,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global lock to prevent concurrent driver initialization
-_driver_init_lock = threading.Lock()
+# Global lock removed - no longer needed, was preventing true concurrency
 
 # Global bandwidth tracking
 _total_bandwidth_lock = threading.Lock()
@@ -142,9 +144,8 @@ class FacebookNumberChecker:
         # Enable performance logging to capture network data
         options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
 
-        # Use lock to prevent concurrent driver initialization
-        with _driver_init_lock:
-            self.driver = webdriver.Chrome(options=options)
+        # No lock needed - allow true concurrent browser initialization
+        self.driver = webdriver.Chrome(options=options)
 
         # Enable Performance logging to track network activity
         self.driver.execute_cdp_cmd('Network.enable', {})
@@ -157,6 +158,7 @@ class FacebookNumberChecker:
         self.driver.set_window_size(width, height)
 
         logger.info(f"Browser initialized (headless={self.headless}) with size: {width}x{height}")
+
 
     def get_network_stats(self):
         """Retrieve network statistics from Chrome DevTools Protocol"""
@@ -278,19 +280,6 @@ class FacebookNumberChecker:
     def search_phone_number(self, phone_number):
         self.current_phone_number = phone_number
         self.driver.get("https://www.facebook.com/login/identify/")
-
-        email_input = self.wait.until(
-            EC.presence_of_element_located((By.ID, "identify_email"))
-        )
-
-        email_input.clear()
-        email_input.send_keys(phone_number)
-
-        search_button = self.wait.until(
-            EC.element_to_be_clickable((By.ID, "did_submit"))
-        )
-        search_button.click()
-        logger.info(f"Searched for phone number: {phone_number}")
 
     def select_account(self):
         first_account_link = self.wait.until(
@@ -427,23 +416,48 @@ class FacebookNumberChecker:
                 logger.error(f"Failed with alternative selector too: {e2}")
                 raise
 
+    def click_clickable_parent(self, element):
+        """Tries to click the element; if not clickable, moves up until a clickable parent is found."""
+        if element.is_displayed() and element.is_enabled():
+            element.click()
+            return True
+        else:
+            parent = element.find_element(By.XPATH, "..")
+            if parent.tag_name.lower() == "html":
+                return False
+            return self.click_clickable_parent(parent)
+
     def allow_cookie(self):
         try:
-            # Wait for and click the "Allow all cookies" button
-            allow_cookie_button = self.wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//div[@aria-label='Allow all cookies' and @role='button']"))
-            )
-            allow_cookie_button.click()
-            logger.info("Allow all cookies button clicked")
-        except Exception as e:
-            logger.error(f"Failed to click allow cookies button: {e}")
-            raise
+            allow_cookie = self.driver.find_element(By.XPATH, f"//*[contains(text(), 'Allow all cookies')]")
+            self.click_clickable_parent(allow_cookie)
+
+        except (TimeoutException, NoSuchElementException):
+            print("⚠️ No cookie popup found or 'Allow all cookies' not present.")
+
+
+    def find_account(self):
+        email_input = self.wait.until(
+            EC.presence_of_element_located((By.ID, "identify_email"))
+        )
+
+        email_input.clear()
+        email_input.send_keys(self.current_phone_number)
+
+        search_button = self.wait.until(
+            EC.element_to_be_clickable((By.ID, "did_submit"))
+        )
+
+        search_button.click()
+        logger.info(f"Searched for phone number: {self.current_phone_number}")
 
 
 
     def handle_continuation(self):
         try:
             text_actions = {
+                "Allow the use of cookies from Facebook on this browser?": self.allow_cookie,
+                "Find Your Account": self.find_account,
                 "These accounts matched your search": self.select_account,
                 "How do you want to receive the code to reset your password?": self.continue_send_code,
                 "How do you want to get the code to reset your password?": self.continue_send_code,
@@ -456,7 +470,6 @@ class FacebookNumberChecker:
                 "Reload page": self.reload_page,
                 "We can send a login code to:": self.direct_code_send,
                 "You’re Temporarily Blocked": self.temporary_blocked,
-                "Allow the use of cookies from Facebook on this browser?": self.allow_cookie,
             }
 
             while self.continuation:
@@ -502,7 +515,6 @@ class FacebookNumberChecker:
                 _global_bandwidth_stats['total_sent'] += self.bandwidth_stats['bytes_sent']
                 _global_bandwidth_stats['total_received'] += self.bandwidth_stats['bytes_received']
                 _global_bandwidth_stats['total_requests'] += self.bandwidth_stats['requests_count']
-
             self.driver.quit()
             logger.info("Browser closed")
 
