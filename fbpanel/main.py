@@ -427,6 +427,18 @@ class FacebookNumberChecker:
                 logger.error(f"Failed with alternative selector too: {e2}")
                 raise
 
+    def allow_cookie(self):
+        try:
+            # Wait for and click the "Allow all cookies" button
+            allow_cookie_button = self.wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//div[@aria-label='Allow all cookies' and @role='button']"))
+            )
+            allow_cookie_button.click()
+            logger.info("Allow all cookies button clicked")
+        except Exception as e:
+            logger.error(f"Failed to click allow cookies button: {e}")
+            raise
+
 
 
     def handle_continuation(self):
@@ -444,6 +456,7 @@ class FacebookNumberChecker:
                 "Reload page": self.reload_page,
                 "We can send a login code to:": self.direct_code_send,
                 "You’re Temporarily Blocked": self.temporary_blocked,
+                "Allow the use of cookies from Facebook on this browser?": self.allow_cookie,
             }
 
             while self.continuation:
