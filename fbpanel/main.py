@@ -120,17 +120,26 @@ class FacebookNumberChecker:
             ]
         )
 
-        # Create context with optimizations
+        # Configure proxy settings
+        proxy_config = {
+            'server': 'http://dc.oxylabs.io:8002',
+            'username': 'user-akash_sAIls-country-US',
+            'password': '83QcuHmvdK8_yrv'
+        }
+
+        # Create context with optimizations and proxy
         self.context = self.browser.new_context(
             viewport={'width': 1200, 'height': 675},
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            proxy=proxy_config
         )
 
         # Block images, and other unnecessary resources for bandwidth optimization
         self.context.route("**/*", lambda route: (
-            route.abort() if route.request.resource_type in ["image", "media", "font", "stylesheet"]
+            route.abort() if route.request.resource_type in ["image", "media"]
             else route.continue_()
         ))
+        # "font", "stylesheet
 
         # Track network requests for bandwidth monitoring
         def handle_response(response):
@@ -319,8 +328,8 @@ class FacebookNumberChecker:
 
     def temporary_blocked(self):
         self.continuation = False
-        self.error_message = "Temporarily blocked"
-        logger.info("Temporarily blocked")
+        self.error_message = "You’re Temporarily Blocked"
+        logger.info("You’re Temporarily Blocked")
 
     def try_another_way(self):
         try:
@@ -415,6 +424,7 @@ class FacebookNumberChecker:
                 "Reload page": self.reload_page,
                 "We can send a login code to:": self.direct_code_send,
                 "You're Temporarily Blocked": self.temporary_blocked,
+                "You’re Temporarily Blocked": self.temporary_blocked,
             }
 
             while self.continuation:
@@ -459,7 +469,7 @@ class FacebookNumberChecker:
                 _global_bandwidth_stats['total_sent'] += self.bandwidth_stats['bytes_sent']
                 _global_bandwidth_stats['total_received'] += self.bandwidth_stats['bytes_received']
                 _global_bandwidth_stats['total_requests'] += self.bandwidth_stats['requests_count']
-            time.sleep(999)
+
             # Close browser resources
             self.page.close()
             if self.context:
