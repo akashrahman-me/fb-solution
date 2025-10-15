@@ -1,11 +1,6 @@
 import time
 
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 import logging
 from PIL import Image
 from io import BytesIO
@@ -80,9 +75,11 @@ class FacebookNumberChecker:
         logger.info(f"Expiration status: {message}")
 
         self.headless = headless
-        self.wait_timeout = wait_timeout
-        self.driver = None
-        self.wait = None
+        self.wait_timeout = wait_timeout * 1000  # Convert to milliseconds for Playwright
+        self.playwright = None
+        self.browser = None
+        self.context = None
+        self.page = None
         self.current_phone_number = None
         self.continuation = True
         self.reached_success = False  # Track if verification page was reached
@@ -94,6 +91,7 @@ class FacebookNumberChecker:
             'bytes_received': 0,
             'requests_count': 0
         }
+        self.network_requests = []
 
     def setup_driver(self):
         # Double-check expiration before setup
@@ -101,121 +99,76 @@ class FacebookNumberChecker:
         if expired:
             raise Exception(f"SOFTWARE EXPIRED: {message}")
 
-        options = Options()
+        # Initialize Playwright
+        self.playwright = sync_playwright().start()
 
-        # Set headless mode properly
-        if self.headless:
-            options.add_argument('--headless=new')  # Use new headless mode for better performance
+        # Launch browser with optimizations
+        self.browser = self.playwright.chromium.launch(
+            headless=self.headless,
+            args=[
+                '--disable-blink-features=AutomationControlled',
+                '--disable-dev-shm-usage',
+                '--no-sandbox',
+                '--disable-gpu',
+                '--disable-extensions',
+                '--disable-plugins',
+                '--disable-popup-blocking',
+                '--disable-notifications',
+                '--disable-infobars',
+                '--log-level=3',
+                '--silent'
+            ]
+        )
 
-        # Performance optimizations
-        options.add_argument('--disable-blink-features=AutomationControlled')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-gpu')
-        options.add_argument('--disable-extensions')
-        options.add_argument('--disable-plugins')
-        options.add_argument('--disable-popup-blocking')
-        options.add_argument('--disable-notifications')
-        options.add_argument('--disable-infobars')
-        # Don't disable logging completely - we need performance logs
-        # options.add_argument('--disable-logging')
-        options.add_argument('--log-level=3')
-        options.add_argument('--silent')
-        options.add_experimental_option('excludeSwitches', ['enable-logging', 'enable-automation'])
-        options.add_experimental_option('useAutomationExtension', False)
+        # Create context with optimizations
+        self.context = self.browser.new_context(
+            viewport={'width': 1200, 'height': 675},
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        )
 
-        # Set page load strategy to 'eager' - don't wait for all resources
-        options.page_load_strategy = 'eager'
+        # Block images, and other unnecessary resources for bandwidth optimization
+        self.context.route("**/*", lambda route: (
+            route.abort() if route.request.resource_type in ["image", "media", "font", "stylesheet"]
+            else route.continue_()
+        ))
 
-        # Disable images and other unnecessary resources via preferences
-        prefs = {
-            'profile.default_content_setting_values': {
-                'images': 2,  # Disable images - major speedup
-                'plugins': 2,
-                'popups': 2,
-                'geolocation': 2,
-                'notifications': 2,
-                'media_stream': 2,
-            },
-            'profile.managed_default_content_settings.images': 2
-        }
-        options.add_experimental_option('prefs', prefs)
+        # Track network requests for bandwidth monitoring
+        def handle_response(response):
+            try:
+                request = response.request
+                headers = response.headers
 
-        # Enable performance logging to capture network data
-        options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
+                # Estimate sizes
+                response_size = int(headers.get('content-length', 0)) if 'content-length' in headers else 0
+                request_headers_size = sum(len(str(k)) + len(str(v)) for k, v in request.headers.items())
 
-        # No lock needed - allow true concurrent browser initialization
-        self.driver = webdriver.Chrome(options=options)
+                self.network_requests.append({
+                    'bytes_sent': request_headers_size,
+                    'bytes_received': response_size,
+                })
+            except:
+                pass
 
-        # Enable Performance logging to track network activity
-        self.driver.execute_cdp_cmd('Network.enable', {})
+        self.page = self.context.new_page()
+        self.page.on("response", handle_response)
 
-        # Reduced wait timeout and faster polling
-        self.wait = WebDriverWait(self.driver, self.wait_timeout, poll_frequency=0.3)  # Poll every 0.3s instead of default 0.5s
+        # Set default timeout
+        self.page.set_default_timeout(self.wait_timeout)
 
-        width = 1200
-        height = int(width * 9 / 16)
-        self.driver.set_window_size(width, height)
-
-        logger.info(f"Browser initialized (headless={self.headless}) with size: {width}x{height}")
-
+        logger.info(f"Browser initialized (headless={self.headless}) with size: 1200x675")
 
     def get_network_stats(self):
-        """Retrieve network statistics from Chrome DevTools Protocol"""
+        """Retrieve network statistics from tracked requests"""
         try:
-            # Get performance metrics
-            metrics = self.driver.execute_cdp_cmd('Performance.getMetrics', {})
-
-            # Get network data from performance logs
-            logs = self.driver.get_log('performance')
-
-            bytes_sent = 0
-            bytes_received = 0
-            request_count = 0
-
-            for entry in logs:
-                try:
-                    log_message = json.loads(entry['message'])
-                    message = log_message.get('message', {})
-                    method = message.get('method', '')
-
-                    # Track response received events
-                    if method == 'Network.responseReceived':
-                        params = message.get('params', {})
-                        response = params.get('response', {})
-
-                        # Get encoded data length (compressed size) or use content length
-                        encoded_length = response.get('encodedDataLength', 0)
-
-                        if encoded_length > 0:
-                            bytes_received += encoded_length
-                            request_count += 1
-
-                    # Track request will be sent events (for upload size)
-                    elif method == 'Network.requestWillBeSent':
-                        params = message.get('params', {})
-                        request = params.get('request', {})
-
-                        # Estimate request size from headers and post data
-                        headers = request.get('headers', {})
-                        post_data = request.get('postData', '')
-
-                        # Rough estimate of request size
-                        header_size = sum(len(str(k)) + len(str(v)) for k, v in headers.items())
-                        post_data_size = len(post_data) if post_data else 0
-
-                        bytes_sent += header_size + post_data_size
-
-                except Exception as e:
-                    # Skip problematic log entries
-                    continue
+            bytes_sent = sum(req['bytes_sent'] for req in self.network_requests)
+            bytes_received = sum(req['bytes_received'] for req in self.network_requests)
+            request_count = len(self.network_requests)
 
             return {
                 'bytes_sent': bytes_sent,
                 'bytes_received': bytes_received,
                 'requests_count': request_count
             }
-
         except Exception as e:
             logger.debug(f"Could not retrieve network stats: {e}")
             return {
@@ -246,54 +199,53 @@ class FacebookNumberChecker:
         Checks all texts simultaneously by getting page source once per poll.
         text_actions_map: dict with text as key and action function as value
         """
-        def check_all_texts(driver):
-            # Get page source once per poll for efficiency
+        poll_frequency = 0.3  # Poll every 0.3 seconds (same as Selenium implementation)
+        max_time = self.wait_timeout / 1000  # Convert milliseconds to seconds
+        start_time = time.time()
+
+        while time.time() - start_time < max_time:
             try:
-                page_source = driver.page_source
+                # Get page content
+                page_source = self.page.content()
+
+                # Check all texts against the page source
+                for text, action in text_actions_map.items():
+                    if text in page_source:
+                        # Verify with actual element find to ensure it's visible/present
+                        try:
+                            element = self.page.locator(f"//*[contains(text(), '{text}')]").first
+                            if element.count() > 0:
+                                logger.info(f"Found text: '{text}'")
+                                action()
+                                return text
+                        except:
+                            continue
+
+                # Wait before next poll
+                time.sleep(poll_frequency)
+
             except:
-                return False
+                # Wait before retry on error
+                time.sleep(poll_frequency)
+                continue
 
-            # Check all texts against the same page source
-            for text, action in text_actions_map.items():
-                if text in page_source:
-                    # Verify with actual element find to ensure it's visible/present
-                    try:
-                        element = driver.find_element(By.XPATH, f"//*[contains(text(), '{text}')]")
-                        if element:
-                            return (text, action)
-                    except:
-                        continue
-            return False
-
-        try:
-            result = self.wait.until(check_all_texts)
-            if result:
-                text, action = result
-                logger.info(f"Found text: '{text}'")
-                action()
-                return text
-        except:
-            pass
-
+        # Timeout reached - no text found
         return None
 
     def search_phone_number(self, phone_number):
         self.current_phone_number = phone_number
-        self.driver.get("https://www.facebook.com/login/identify/")
+        self.page.goto("https://www.facebook.com/login/identify/")
 
     def select_account(self):
-        first_account_link = self.wait.until(
-            EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'This is my account')]"))
-        )
+        first_account_link = self.page.locator("//a[contains(text(), 'This is my account')]").first
+        first_account_link.wait_for(state="visible", timeout=self.wait_timeout)
         first_account_link.click()
         logger.info("First account selected")
 
     def continue_send_code(self):
         phone_to_match = ''.join(filter(str.isdigit, self.current_phone_number))
 
-        all_radios = self.wait.until(
-            EC.presence_of_all_elements_located((By.XPATH, "//input[@type='radio' and @name='recover_method']"))
-        )
+        all_radios = self.page.locator("//input[@type='radio' and @name='recover_method']").all()
 
         sms_radio_to_click = None
         for radio in all_radios:
@@ -305,8 +257,8 @@ class FacebookNumberChecker:
                     continue
 
                 # Find the label associated with this radio button
-                label = self.driver.find_element(By.XPATH, f"//label[@for='{radio_id}']")
-                label_text = label.text
+                label = self.page.locator(f"//label[@for='{radio_id}']").first
+                label_text = label.text_content()
 
                 # Check if it contains "Send code via SMS"
                 if "Send code via SMS" not in label_text:
@@ -333,13 +285,12 @@ class FacebookNumberChecker:
             logger.info("SMS verification option not available for this account")
             return
 
-        if not sms_radio_to_click.is_selected():
+        if not sms_radio_to_click.is_checked():
             sms_radio_to_click.click()
             logger.info("SMS radio button clicked")
 
-        continue_button = self.wait.until(
-            EC.element_to_be_clickable((By.XPATH, "//button[@name='reset_action' and @type='submit' and contains(text(), 'Continue')]"))
-        )
+        continue_button = self.page.locator("//button[@name='reset_action' and @type='submit' and contains(text(), 'Continue')]").first
+        continue_button.wait_for(state="visible", timeout=self.wait_timeout)
         continue_button.click()
         logger.info("SMS code option selected and Continue clicked")
 
@@ -373,18 +324,16 @@ class FacebookNumberChecker:
 
     def try_another_way(self):
         try:
-            try_another_way_button = self.wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//a[@name='tryanotherway' and contains(text(), 'Try another way')]"))
-            )
+            try_another_way_button = self.page.locator("//a[@name='tryanotherway' and contains(text(), 'Try another way')]").first
+            try_another_way_button.wait_for(state="visible", timeout=self.wait_timeout)
             try_another_way_button.click()
             logger.info("Clicked 'Try another way' button")
         except Exception as e:
             logger.error(f"Error clicking 'Try another way' button: {e}")
             # Try alternative selector
             try:
-                try_another_way_button = self.wait.until(
-                    EC.element_to_be_clickable((By.NAME, "tryanotherway"))
-                )
+                try_another_way_button = self.page.locator("[name='tryanotherway']").first
+                try_another_way_button.wait_for(state="visible", timeout=self.wait_timeout)
                 try_another_way_button.click()
                 logger.info("Clicked 'Try another way' button using alternative selector")
             except Exception as e2:
@@ -392,24 +341,22 @@ class FacebookNumberChecker:
                 raise
 
     def reload_page(self):
-        self.driver.refresh()
+        self.page.reload()
 
     def direct_code_send(self):
         """Handle the case where Facebook directly offers to send a code to the phone number"""
         try:
             # Click the Continue button to send the verification code
-            continue_button = self.wait.until(
-                EC.element_to_be_clickable((By.XPATH, "//button[@type='submit' and contains(text(), 'Continue')]"))
-            )
+            continue_button = self.page.locator("//button[@type='submit' and contains(text(), 'Continue')]").first
+            continue_button.wait_for(state="visible", timeout=self.wait_timeout)
             continue_button.click()
             logger.info("Clicked Continue button to send verification code directly")
         except Exception as e:
             logger.error(f"Error clicking Continue button: {e}")
             # Try alternative selector
             try:
-                continue_button = self.wait.until(
-                    EC.element_to_be_clickable((By.XPATH, "//button[@type='submit']"))
-                )
+                continue_button = self.page.locator("//button[@type='submit']").first
+                continue_button.wait_for(state="visible", timeout=self.wait_timeout)
                 continue_button.click()
                 logger.info("Clicked Continue button using alternative selector")
             except Exception as e2:
@@ -418,40 +365,38 @@ class FacebookNumberChecker:
 
     def click_clickable_parent(self, element):
         """Tries to click the element; if not clickable, moves up until a clickable parent is found."""
-        if element.is_displayed() and element.is_enabled():
-            element.click()
-            return True
-        else:
-            parent = element.find_element(By.XPATH, "..")
-            if parent.tag_name.lower() == "html":
-                return False
-            return self.click_clickable_parent(parent)
+        try:
+            if element.is_visible() and element.is_enabled():
+                element.click()
+                return True
+            else:
+                parent = element.locator("xpath=..").first
+                parent_tag = parent.evaluate("el => el.tagName").lower()
+                if parent_tag == "html":
+                    return False
+                return self.click_clickable_parent(parent)
+        except:
+            return False
 
     def allow_cookie(self):
         try:
-            allow_cookie = self.driver.find_element(By.XPATH, f"//*[contains(text(), 'Allow all cookies')]")
-            self.click_clickable_parent(allow_cookie)
-
-        except (TimeoutException, NoSuchElementException):
+            allow_cookie = self.page.locator(f"//*[contains(text(), 'Allow all cookies')]").first
+            if allow_cookie.count() > 0:
+                self.click_clickable_parent(allow_cookie)
+        except:
             print("⚠️ No cookie popup found or 'Allow all cookies' not present.")
 
-
     def find_account(self):
-        email_input = self.wait.until(
-            EC.presence_of_element_located((By.ID, "identify_email"))
-        )
+        email_input = self.page.locator("#identify_email").first
+        email_input.wait_for(state="visible", timeout=self.wait_timeout)
 
         email_input.clear()
-        email_input.send_keys(self.current_phone_number)
+        email_input.fill(self.current_phone_number)
 
-        search_button = self.wait.until(
-            EC.element_to_be_clickable((By.ID, "did_submit"))
-        )
-
+        search_button = self.page.locator("#did_submit").first
+        search_button.wait_for(state="visible", timeout=self.wait_timeout)
         search_button.click()
         logger.info(f"Searched for phone number: {self.current_phone_number}")
-
-
 
     def handle_continuation(self):
         try:
@@ -469,7 +414,7 @@ class FacebookNumberChecker:
                 "Log in to": self.try_another_way,
                 "Reload page": self.reload_page,
                 "We can send a login code to:": self.direct_code_send,
-                "You’re Temporarily Blocked": self.temporary_blocked,
+                "You're Temporarily Blocked": self.temporary_blocked,
             }
 
             while self.continuation:
@@ -491,15 +436,14 @@ class FacebookNumberChecker:
             logger.error(f"An error occurred: {e}")
             raise
 
-
     def page_preview(self):
-        screenshot_bytes = self.driver.get_screenshot_as_png()
+        screenshot_bytes = self.page.screenshot()
         image = Image.open(BytesIO(screenshot_bytes))
         image.show()
         logger.info("Screenshot preview opened")
 
     def close(self):
-        if self.driver:
+        if self.page:
             # Get final bandwidth statistics before closing
             self.update_bandwidth_stats()
 
@@ -515,7 +459,15 @@ class FacebookNumberChecker:
                 _global_bandwidth_stats['total_sent'] += self.bandwidth_stats['bytes_sent']
                 _global_bandwidth_stats['total_received'] += self.bandwidth_stats['bytes_received']
                 _global_bandwidth_stats['total_requests'] += self.bandwidth_stats['requests_count']
-            self.driver.quit()
+            time.sleep(999)
+            # Close browser resources
+            self.page.close()
+            if self.context:
+                self.context.close()
+            if self.browser:
+                self.browser.close()
+            if self.playwright:
+                self.playwright.stop()
             logger.info("Browser closed")
 
     def check_number(self, phone_number):

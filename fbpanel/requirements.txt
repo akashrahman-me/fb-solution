@@ -1,7 +1,5 @@
 requests~=2.32.5
-undetected-chromedriver
-selenium
-setuptools
+playwright
 pillow
 fastapi
 uvicorn[standard]
