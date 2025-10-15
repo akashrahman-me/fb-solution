@@ -377,6 +377,11 @@ class FacebookNumberChecker:
         self.error_message = "Robot detected - CAPTCHA required"
         logger.info("Robot detected")
 
+    def temporary_blocked(self):
+        self.continuation = False
+        self.error_message = "Temporarily blocked"
+        logger.info("Temporarily blocked")
+
     def try_another_way(self):
         try:
             try_another_way_button = self.wait.until(
@@ -422,6 +427,8 @@ class FacebookNumberChecker:
                 logger.error(f"Failed with alternative selector too: {e2}")
                 raise
 
+
+
     def handle_continuation(self):
         try:
             text_actions = {
@@ -436,6 +443,7 @@ class FacebookNumberChecker:
                 "Log in to": self.try_another_way,
                 "Reload page": self.reload_page,
                 "We can send a login code to:": self.direct_code_send,
+                "You’re Temporarily Blocked": self.temporary_blocked,
             }
 
             while self.continuation:
