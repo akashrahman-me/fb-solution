@@ -7,9 +7,6 @@ from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 from datetime import datetime
-import json
-import random
-import string
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,8 +15,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global lock removed - no longer needed, was preventing true concurrency
-
 # Global bandwidth tracking
 _total_bandwidth_lock = threading.Lock()
 _global_bandwidth_stats = {
@@ -27,213 +22,6 @@ _global_bandwidth_stats = {
     'total_received': 0,
     'total_requests': 0
 }
-
-# ============================================
-# EXPIRATION CONFIGURATION
-# ============================================
-# Set the expiration date (YYYY, MM, DD, HH, MM, SS)
-# After this date, the software will stop working for all users
-# EXPIRATION_DATE = datetime(2025, 10, 17, 23, 59, 59)  # Expires on October 17, 2025 at 11:59:59 PM
-EXPIRATION_DATE = datetime(2025, 10, 19, 23, 59, 59)  # Expires on October 17, 2025 at 11:59:59 PM
-
-# Set to None to disable expiration
-# EXPIRATION_DATE = None
-# ============================================
-
-class ExpirationChecker:
-    """Handles software expiration logic"""
-
-    @staticmethod
-    def check_expiration():
-        """Check if software has expired. Returns (expired, message)"""
-
-        # If no expiration date is set, return not expired
-        if EXPIRATION_DATE is None:
-            return False, "No expiration set"
-
-        # Check if current date is past expiration date
-        now = datetime.now()
-        if now > EXPIRATION_DATE:
-            days_expired = (now - EXPIRATION_DATE).days
-            return True, f"This software expired on {EXPIRATION_DATE.strftime('%B %d, %Y')} ({days_expired} days ago)"
-        else:
-            days_remaining = (EXPIRATION_DATE - now).days
-            hours_remaining = int((EXPIRATION_DATE - now).seconds / 3600)
-
-            # Warn if expiring soon
-            if days_remaining <= 3:
-                logger.warning(f"Software will expire in {days_remaining} days and {hours_remaining} hours!")
-
-            return False, f"Software expires on {EXPIRATION_DATE.strftime('%B %d, %Y at %I:%M %p')}"
-
-
-class AntiDetection:
-    """Comprehensive anti-detection and stealth configuration"""
-
-    # Realistic user agents with various browsers, OS, and versions
-    USER_AGENTS = [
-        # Chrome on Windows
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-
-        # Chrome on macOS
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-
-        # Firefox on Windows
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
-
-        # Edge on Windows
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0',
-    ]
-
-    # Realistic viewport sizes (width, height) - common resolutions
-    VIEWPORTS = [
-        {'width': 1920, 'height': 1080},  # Full HD
-        {'width': 1366, 'height': 768},   # Common laptop
-        {'width': 1536, 'height': 864},   # HD+
-        {'width': 1440, 'height': 900},   # WXGA+
-        {'width': 1600, 'height': 900},   # HD+
-        {'width': 1680, 'height': 1050},  # WSXGA+
-        {'width': 1280, 'height': 720},   # HD
-        {'width': 1280, 'height': 1024},  # SXGA
-        {'width': 2560, 'height': 1440},  # QHD
-    ]
-
-    # Timezones that match US location (for proxy)
-    TIMEZONES = [
-        'America/New_York',      # EST/EDT
-        'America/Chicago',       # CST/CDT
-        'America/Denver',        # MST/MDT
-        'America/Los_Angeles',   # PST/PDT
-        'America/Phoenix',       # MST (no DST)
-        'America/Detroit',       # EST/EDT
-        'America/Indianapolis',  # EST/EDT
-    ]
-
-    # US Locales
-    LOCALES = ['en-US']
-
-    @staticmethod
-    def get_random_user_agent():
-        """Get a random user agent"""
-        return random.choice(AntiDetection.USER_AGENTS)
-
-    @staticmethod
-    def get_random_viewport():
-        """Get a random viewport size"""
-        return random.choice(AntiDetection.VIEWPORTS)
-
-    @staticmethod
-    def get_random_timezone():
-        """Get a random US timezone"""
-        return random.choice(AntiDetection.TIMEZONES)
-
-    @staticmethod
-    def get_random_locale():
-        """Get a random locale"""
-        return random.choice(AntiDetection.LOCALES)
-
-    @staticmethod
-    def random_delay(min_seconds=0.5, max_seconds=2.0):
-        """Generate random delay to simulate human behavior"""
-        return random.uniform(min_seconds, max_seconds)
-
-    @staticmethod
-    def random_typing_delay():
-        """Generate random typing delay (per character)"""
-        return random.uniform(0.05, 0.15)
-
-    @staticmethod
-    def get_stealth_js():
-        """JavaScript to inject for hiding automation and randomizing fingerprints"""
-        return """
-        // Override the navigator.webdriver property
-        Object.defineProperty(navigator, 'webdriver', {
-            get: () => undefined
-        });
-        
-        // Override plugins to look more realistic
-        Object.defineProperty(navigator, 'plugins', {
-            get: () => [
-                {
-                    name: 'Chrome PDF Plugin',
-                    description: 'Portable Document Format',
-                    filename: 'internal-pdf-viewer'
-                },
-                {
-                    name: 'Chrome PDF Viewer',
-                    description: 'Portable Document Format',
-                    filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai'
-                },
-                {
-                    name: 'Native Client',
-                    description: '',
-                    filename: 'internal-nacl-plugin'
-                }
-            ]
-        });
-        
-        // Override languages to look realistic
-        Object.defineProperty(navigator, 'languages', {
-            get: () => ['en-US', 'en']
-        });
-        
-        // Randomize canvas fingerprint
-        const originalGetContext = HTMLCanvasElement.prototype.getContext;
-        HTMLCanvasElement.prototype.getContext = function(type, attributes) {
-            const context = originalGetContext.call(this, type, attributes);
-            if (type === '2d') {
-                const originalFillText = context.fillText;
-                context.fillText = function(...args) {
-                    // Add tiny random noise to canvas fingerprint
-                    const noise = Math.random() * 0.0001;
-                    if (args[1]) args[1] += noise;
-                    if (args[2]) args[2] += noise;
-                    return originalFillText.apply(this, args);
-                };
-            }
-            return context;
-        };
-        
-        // Override permissions
-        const originalQuery = navigator.permissions.query;
-        navigator.permissions.query = (parameters) => (
-            parameters.name === 'notifications' ?
-                Promise.resolve({ state: Notification.permission }) :
-                originalQuery(parameters)
-        );
-        
-        // Remove automation-related properties
-        delete navigator.__proto__.webdriver;
-        
-        // Mock chrome runtime
-        if (!window.chrome) {
-            window.chrome = {};
-        }
-        if (!window.chrome.runtime) {
-            window.chrome.runtime = {
-                connect: () => {},
-                sendMessage: () => {}
-            };
-        }
-        
-        // Randomize hardware concurrency slightly
-        Object.defineProperty(navigator, 'hardwareConcurrency', {
-            get: () => Math.floor(Math.random() * 4) + 4  // 4-8 cores
-        });
-        
-        // Randomize device memory
-        Object.defineProperty(navigator, 'deviceMemory', {
-            get: () => [4, 8, 16][Math.floor(Math.random() * 3)]
-        });
-        """
 
 # ============================================
 # EXPIRATION CONFIGURATION
@@ -302,16 +90,7 @@ class FacebookNumberChecker:
         }
         self.network_requests = []
 
-        # Anti-detection: Generate random browser profile for this session
-        self.user_agent = AntiDetection.get_random_user_agent()
-        self.viewport = AntiDetection.get_random_viewport()
-        self.timezone = AntiDetection.get_random_timezone()
-        self.locale = AntiDetection.get_random_locale()
-
-        logger.info(f"Session initialized with randomized profile:")
-        logger.info(f"  - Viewport: {self.viewport['width']}x{self.viewport['height']}")
-        logger.info(f"  - Timezone: {self.timezone}")
-        logger.info(f"  - User Agent: {self.user_agent[:80]}...")
+        logger.info(f"Session initialized")
 
     def setup_driver(self):
         # Double-check expiration before setup
@@ -322,7 +101,7 @@ class FacebookNumberChecker:
         # Initialize Playwright
         self.playwright = sync_playwright().start()
 
-        # Launch browser with optimizations and anti-detection
+        # Launch browser with optimizations
         self.browser = self.playwright.chromium.launch(
             headless=self.headless,
             args=[
@@ -339,7 +118,6 @@ class FacebookNumberChecker:
                 '--silent',
                 '--disable-web-security',
                 '--disable-features=IsolateOrigins,site-per-process',
-                f'--window-size={self.viewport["width"]},{self.viewport["height"]}',
             ]
         )
 
@@ -350,22 +128,9 @@ class FacebookNumberChecker:
             'password': 'yag0ewjl9tws'
         }
 
-        # Create context with anti-detection measures and proxy
+        # Create context with proxy
         self.context = self.browser.new_context(
-            viewport=self.viewport,
-            user_agent=self.user_agent,
-            locale=self.locale,
-            timezone_id=self.timezone,
             proxy=proxy_config,
-            # Additional anti-detection settings
-            device_scale_factor=random.choice([1, 1.25, 1.5, 2]),
-            is_mobile=False,
-            has_touch=False,
-            color_scheme=random.choice(['light', 'dark', 'no-preference']),
-            # Permissions
-            permissions=[],
-            # Geolocation - randomize within US
-            geolocation={'latitude': random.uniform(25.0, 49.0), 'longitude': random.uniform(-125.0, -66.0)},
         )
 
         # Block images, media, and JavaScript files for bandwidth optimization
@@ -393,15 +158,10 @@ class FacebookNumberChecker:
 
         self.page = self.context.new_page()
 
-        # Inject stealth scripts before any page load
-        self.page.add_init_script(AntiDetection.get_stealth_js())
-
-        self.page.on("response", handle_response)
-
         # Set default timeout
         self.page.set_default_timeout(self.wait_timeout)
 
-        logger.info(f"Browser initialized (headless={self.headless}) with size: {self.viewport['width']}x{self.viewport['height']}")
+        logger.info(f"Browser initialized (headless={self.headless})")
 
     def get_network_stats(self):
         """Retrieve network statistics from tracked requests"""
@@ -478,86 +238,17 @@ class FacebookNumberChecker:
         # Timeout reached - no text found
         return None
 
-    def human_like_type(self, element, text):
-        """Type text with human-like delays between characters"""
-        element.click()  # Focus on the element first
-        time.sleep(AntiDetection.random_delay(0.1, 0.3))
-
-        for char in text:
-            element.type(char)
-            time.sleep(AntiDetection.random_typing_delay())
-
-        # Random pause after typing
-        time.sleep(AntiDetection.random_delay(0.2, 0.5))
-
-    def human_like_click(self, element):
-        """Click with human-like delay before and after"""
-        # Small delay before clicking
-        time.sleep(AntiDetection.random_delay(0.3, 0.8))
-
-        # Scroll element into view naturally
-        element.scroll_into_view_if_needed()
-        time.sleep(AntiDetection.random_delay(0.1, 0.3))
-
-        # Click
-        element.click()
-
-        # Small delay after clicking
-        time.sleep(AntiDetection.random_delay(0.5, 1.5))
-
-    def random_mouse_movement(self):
-        """Simulate random mouse movements on the page"""
-        try:
-            # Move mouse to random positions
-            for _ in range(random.randint(1, 3)):
-                x = random.randint(100, self.viewport['width'] - 100)
-                y = random.randint(100, self.viewport['height'] - 100)
-                self.page.mouse.move(x, y)
-                time.sleep(AntiDetection.random_delay(0.1, 0.4))
-        except:
-            pass
-
-    def random_scroll(self):
-        """Simulate random scrolling behavior"""
-        try:
-            # Random small scrolls
-            scroll_amount = random.randint(100, 400)
-            direction = random.choice([1, -1])
-
-            self.page.evaluate(f"window.scrollBy(0, {scroll_amount * direction})")
-            time.sleep(AntiDetection.random_delay(0.3, 0.8))
-        except:
-            pass
-
     def search_phone_number(self, phone_number):
         self.current_phone_number = phone_number
-
-        # Add random delay before navigation
-        time.sleep(AntiDetection.random_delay(0.5, 1.5))
-
         self.page.goto("https://www.facebook.com/login/identify/")
 
-        # Simulate reading the page
-        time.sleep(AntiDetection.random_delay(1.0, 2.5))
-
-        # Random mouse movements
-        self.random_mouse_movement()
-
     def select_account(self):
-        time.sleep(AntiDetection.random_delay(1.0, 2.5))  # Wait before selecting
-
         first_account_link = self.page.locator("//a[contains(text(), 'This is my account')]").first
         first_account_link.wait_for(state="visible", timeout=self.wait_timeout)
-
-        # Human-like interaction
-        self.random_scroll()
-        self.human_like_click(first_account_link)
-
+        first_account_link.click()
         logger.info("First account selected")
 
     def continue_send_code(self):
-        time.sleep(AntiDetection.random_delay(1.5, 3.0))  # Human-like pause to read options
-
         phone_to_match = ''.join(filter(str.isdigit, self.current_phone_number))
 
         all_radios = self.page.locator("//input[@type='radio' and @name='recover_method']").all()
@@ -600,12 +291,12 @@ class FacebookNumberChecker:
             return
 
         if not sms_radio_to_click.is_checked():
-            self.human_like_click(sms_radio_to_click)
+            sms_radio_to_click.click()
             logger.info("SMS radio button clicked")
 
         continue_button = self.page.locator("//button[@name='reset_action' and @type='submit' and contains(text(), 'Continue')]").first
         continue_button.wait_for(state="visible", timeout=self.wait_timeout)
-        self.human_like_click(continue_button)
+        continue_button.click()
         logger.info("SMS code option selected and Continue clicked")
 
     def continue_phone_number(self):
@@ -637,12 +328,10 @@ class FacebookNumberChecker:
         logger.info("You’re Temporarily Blocked")
 
     def try_another_way(self):
-        time.sleep(AntiDetection.random_delay(1.0, 2.0))  # Pause before clicking
-
         try:
             try_another_way_button = self.page.locator("//a[@name='tryanotherway' and contains(text(), 'Try another way')]").first
             try_another_way_button.wait_for(state="visible", timeout=self.wait_timeout)
-            self.human_like_click(try_another_way_button)
+            try_another_way_button.click()
             logger.info("Clicked 'Try another way' button")
         except Exception as e:
             logger.error(f"Error clicking 'Try another way' button: {e}")
@@ -661,13 +350,11 @@ class FacebookNumberChecker:
 
     def direct_code_send(self):
         """Handle the case where Facebook directly offers to send a code to the phone number"""
-        time.sleep(AntiDetection.random_delay(1.5, 3.0))  # Human-like pause to read
-
         try:
             # Click the Continue button to send the verification code
             continue_button = self.page.locator("//button[@type='submit' and contains(text(), 'Continue')]").first
             continue_button.wait_for(state="visible", timeout=self.wait_timeout)
-            self.human_like_click(continue_button)
+            continue_button.click()
             logger.info("Clicked Continue button to send verification code directly")
         except Exception as e:
             logger.error(f"Error clicking Continue button: {e}")
@@ -685,7 +372,7 @@ class FacebookNumberChecker:
         """Tries to click the element; if not clickable, moves up until a clickable parent is found."""
         try:
             if element.is_visible() and element.is_enabled():
-                self.human_like_click(element)
+                element.click()
                 return True
             else:
                 parent = element.locator("xpath=..").first
@@ -697,8 +384,6 @@ class FacebookNumberChecker:
             return False
 
     def allow_cookie(self):
-        time.sleep(AntiDetection.random_delay(0.5, 1.5))  # Pause before accepting cookies
-
         try:
             allow_cookie = self.page.locator(f"//*[contains(text(), 'Allow all cookies')]").first
             if allow_cookie.count() > 0:
@@ -707,25 +392,14 @@ class FacebookNumberChecker:
             print("⚠️ No cookie popup found or 'Allow all cookies' not present.")
 
     def find_account(self):
-        time.sleep(AntiDetection.random_delay(1.0, 2.5))  # Pause as if reading the page
-
         email_input = self.page.locator("#identify_email").first
         email_input.wait_for(state="visible", timeout=self.wait_timeout)
-
-        # Random mouse movement before typing
-        self.random_mouse_movement()
-
         email_input.clear()
-
-        # Human-like typing
-        self.human_like_type(email_input, self.current_phone_number)
-
-        # Small pause before clicking search
-        time.sleep(AntiDetection.random_delay(0.5, 1.5))
+        email_input.type(self.current_phone_number)
 
         search_button = self.page.locator("#did_submit").first
         search_button.wait_for(state="visible", timeout=self.wait_timeout)
-        self.human_like_click(search_button)
+        search_button.click()
         logger.info(f"Searched for phone number: {self.current_phone_number}")
 
     def handle_continuation(self):
@@ -862,16 +536,129 @@ def check_single_number(phone_number):
     finally:
         checker.close()
 
+def string_to_number_array(data_str):
+    """
+    Converts a multi-line string of numbers into a list of integers.
+
+    :param data_str: The input string where each number is on a new line.
+    :return: A list of integers.
+    """
+    # Split the string by newline, filter out any empty strings,
+    # and convert the remaining non-empty strings to integers.
+    number_array = [num_str.strip() for num_str in data_str.split('\n') if num_str.strip()]
+    return number_array
+
 
 if __name__ == "__main__":
+    nums_str = """
+    2250720090666
+    2250720093506
+    2250720091783
+    2250720093644
+    2250720091803
+    2250720093238
+    2250720092529
+    2250720097722
+    2250720091417
+    2250720096645
+    2250720097932
+    2250720092604
+    2250720096754
+    2250720099074
+    2250720092741
+    2250720097048
+    2250720093780
+    2250720096837
+    2250720095658
+    2250720094631
+    2250720092380
+    2250720096050
+    2250720091012
+    2250720097381
+    2250720095957
+    2250720096373
+    2250720090591
+    2250720094143
+    2250720099690
+    2250720095090
+    2250720098872
+    2250720098676
+    2250720099898
+    2250720097371
+    2250720097114
+    2250720091786
+    2250720093991
+    2250720093137
+    2250720090985
+    2250720092022
+    2250720096221
+    2250720095219
+    2250720093273
+    2250720091574
+    2250720097361
+    2250720092607
+    2250720093871
+    2250720092882
+    2250720099569
+    2250720092267
+    2250720093954
+    2250720090050
+    2250720093578
+    2250720095482
+    2250720095184
+    2250720092433
+    2250720096967
+    2250720095491
+    2250720091289
+    2250720098348
+    2250720096947
+    2250720093786
+    2250720090628
+    2250720091913
+    2250720097703
+    2250720091189
+    2250720098197
+    2250720096909
+    2250720094050
+    2250720092640
+    2250720096641
+    2250720094115
+    2250720092910
+    2250720099068
+    2250720091922
+    2250720096081
+    2250720091582
+    2250720091493
+    2250720092266
+    2250720097767
+    2250720096966
+    2250720092577
+    2250720091770
+    2250720095950
+    2250720096246
+    2250720091518
+    2250720092589
+    2250720093916
+    2250720094090
+    2250720098137
+    2250720091884
+    2250720097621
+    2250720097790
+    2250720096472
+    2250720095730
+    2250720093750
+    2250720097035
+    2250720095035
+    2250720095937
+    2250720097304
+    """
 
-    nums = [
-        "2250706815570",
-    ]
+    nums = string_to_number_array(nums_str)
 
     results = []
 
     logger.info(f"Starting to check {len(nums)} phone numbers with 5 concurrent workers")
+
 
     with ThreadPoolExecutor(max_workers=1) as executor:
         # Submit all tasks

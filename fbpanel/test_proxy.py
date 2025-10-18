@@ -2,10 +2,10 @@ import requests
 import json
 
 # Proxy configuration
-proxy_host = "dc.oxylabs.io"
-proxy_port = "8000"
-proxy_user = "user-akash_sAIls-country-US"
-proxy_pass = "83QcuHmvdK8_yrv"
+proxy_host = "142.111.48.253"
+proxy_port = "7030"
+proxy_user = "rqsgbzmp"
+proxy_pass = "yag0ewjl9tws"
 
 # Format proxy URL with authentication
 proxies = {
