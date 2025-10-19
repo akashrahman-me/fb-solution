@@ -64,11 +64,13 @@ class FacebookNumberChecker:
         self.playwright = None
         self.browser = None
         self.page = None
+        self.context = None
         self.current_phone_number = None
         self.continuation = True
         self.reached_success = False
         self.error_message = None
         self.network_requests = []
+        self.cdp_session = None
 
         logger.info("Session initialized")
 
@@ -91,27 +93,76 @@ class FacebookNumberChecker:
         )
 
         # Create a context to enable proper caching
-        context = self.browser.new_context()
-        self.page = context.new_page()
+        self.context = self.browser.new_context()
+        self.page = self.context.new_page()
 
-        # Remove route blocking to allow caching
-        # Resources will now be cached and loaded from memory-cache/disk cache
+        # Use CDP to accurately track network bandwidth
+        self.cdp_session = self.context.new_cdp_session(self.page)
+        self.cdp_session.send('Network.enable')
 
-        self.page.on("response", self._track_response)
+        # Listen to CDP Network events for accurate tracking
+        self.cdp_session.on('Network.responseReceived', self._on_cdp_response)
+        self.cdp_session.on('Network.loadingFinished', self._on_cdp_loading_finished)
+
+        # Store request IDs and their info
+        self.pending_requests = {}
+
         self.page.set_default_timeout(self.wait_timeout)
 
         logger.info(f"Browser initialized (headless={self.headless})")
 
-    def _track_response(self, response):
-        """Track network response for bandwidth monitoring"""
+    def _on_cdp_response(self, params):
+        """Handle CDP Network.responseReceived event"""
         try:
-            headers = response.headers
-            response_size = int(headers.get('content-length', 0))
-            request_headers_size = sum(len(str(k)) + len(str(v)) for k, v in response.request.headers.items())
-            self.network_requests.append({
-                'bytes_sent': request_headers_size,
-                'bytes_received': response_size,
-            })
+            request_id = params.get('requestId')
+            response = params.get('response', {})
+
+            # Check if response was served from cache
+            from_disk_cache = response.get('fromDiskCache', False)
+            from_service_worker = response.get('fromServiceWorker', False)
+            from_prefetch_cache = response.get('fromPrefetchCache', False)
+
+            # Skip cached resources
+            if from_disk_cache or from_service_worker or from_prefetch_cache:
+                return
+
+            # Store info for this request
+            self.pending_requests[request_id] = {
+                'url': response.get('url', ''),
+                'status': response.get('status', 0),
+                'headers': response.get('headers', {}),
+                'encoded_data_length': 0
+            }
+        except:
+            pass
+
+    def _on_cdp_loading_finished(self, params):
+        """Handle CDP Network.loadingFinished event"""
+        try:
+            request_id = params.get('requestId')
+            encoded_data_length = params.get('encodedDataLength', 0)
+
+            if request_id in self.pending_requests:
+                request_info = self.pending_requests[request_id]
+
+                # Skip data URLs
+                url = request_info['url']
+                if url.startswith('data:') or url.startswith('blob:'):
+                    del self.pending_requests[request_id]
+                    return
+
+                # Calculate actual bandwidth
+                # encodedDataLength includes headers + body as received over network
+                if encoded_data_length > 0:
+                    self.network_requests.append({
+                        'bytes_sent': 0,  # Request size is minimal (headers only)
+                        'bytes_received': encoded_data_length,
+                        'url': url,
+                        'status': request_info['status']
+                    })
+
+                # Clean up
+                del self.pending_requests[request_id]
         except:
             pass
 
