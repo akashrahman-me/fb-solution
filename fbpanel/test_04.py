@@ -1,25 +1,7 @@
-import undetected_chromedriver as uc
-import time
+from playwright.sync_api import sync_playwright
 
-# Test opening Google website with undetected Chrome driver
-print("Initializing undetected Chrome driver...")
-
-# Create Chrome options
-options = uc.ChromeOptions()
-# options.add_argument('--headless')  # Uncomment for headless mode
-
-# Initialize the undetected Chrome driver
-driver = uc.Chrome(options=options)
-
-try:
-    driver.get('https://www.ivasms.com/portal/live/my_sms')
-
-    print(f"Page title: {driver.title}")
-    print(f"Current URL: {driver.current_url}")
-
-except Exception as e:
-    print(f"Error occurred: {e}")
-
-finally:
-    input("Press Enter to close the browser...")
-    driver.quit()
+with sync_playwright() as p:
+    browser = p.chromium.launch(headless=False)  # Set True to hide browser
+    page = browser.new_page()
+    page.goto("https://www.facebook.com/login/identify")
+    browser.close()
