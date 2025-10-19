@@ -1,4 +1,5 @@
 import time
+import random
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 import logging
@@ -62,14 +63,48 @@ class ExpirationChecker:
             return False, f"Software expires on {EXPIRATION_DATE.strftime('%B %d, %Y at %I:%M %p')}"
 
 
+def parse_ip_data(data_string):
+    """
+    Converts a multi-line string of IP:port:username:password into a
+    list of dictionaries with 'server', 'username', and 'password' keys.
+
+    :param data_string: The input string.
+    :return: A list of dictionaries.
+    """
+    result_array = []
+
+    # Split the string into individual lines
+    lines = data_string.strip().split('\n')
+
+    for line in lines:
+        # Split each line by the colon (:) delimiter
+        parts = line.split(':')
+
+        # Ensure the line has exactly 4 parts (IP, Port, User, Pass)
+        if len(parts) == 4:
+            ip_address = parts[0].strip()
+            port = parts[1]
+            username = parts[2]
+            password = parts[3]
+
+            # Create the dictionary (object) in the desired format
+            obj = {
+                'server': f'http://{ip_address}:{port}',
+                'username': username,
+                'password': password
+            }
+            result_array.append(obj)
+
+    return result_array
+
+
+
 class FacebookNumberChecker:
-    def __init__(self, headless=False, wait_timeout=120):
+    def __init__(self, headless=False, wait_timeout=20):
         # Check expiration before initializing
         expired, message = ExpirationChecker.check_expiration()
         if expired:
             raise Exception(f"SOFTWARE EXPIRED: {message}")
-
-        logger.info(f"Expiration status: {message}")
 
         self.headless = headless
         self.wait_timeout = wait_timeout * 1000  # Convert to milliseconds for Playwright
@@ -121,10 +156,25 @@ class FacebookNumberChecker:
             ]
         )
 
-        # Configure  proxy
+        # proxies = parse_ip_data("""
+        #     142.111.48.253:7030:rqsgbzmp:yag0ewjl9tws
+        #     31.59.20.176:6754:rqsgbzmp:yag0ewjl9tws
+        #     38.170.176.177:5572:rqsgbzmp:yag0ewjl9tws
+        #     198.23.239.134:6540:rqsgbzmp:yag0ewjl9tws
+        #     45.38.107.97:6014:rqsgbzmp:yag0ewjl9tws
+        #     107.172.163.27:6543:rqsgbzmp:yag0ewjl9tws
+        #     64.137.96.74:6641:rqsgbzmp:yag0ewjl9tws
+        #     216.10.27.159:6837:rqsgbzmp:yag0ewjl9tws
+        #     142.111.67.146:5611:rqsgbzmp:yag0ewjl9tws
+        #     142.147.128.93:6593:rqsgbzmp:yag0ewjl9tws
+        # """)
+        #
+        # # Configure  proxy
+        # proxy_config = random.choice(proxies)
+
         proxy_config = {
-            'server': 'http://142.111.48.253:7030',
-            'username': 'rqsgbzmp',
+            'server': 'http://p.webshare.io:80',
+            'username': 'rqsgbzmp-rotate',
             'password': 'yag0ewjl9tws'
         }
 
@@ -425,14 +475,23 @@ class FacebookNumberChecker:
             while self.continuation:
                 found_text = self.wait_for_text_and_execute(text_actions)
 
-                if not found_text:
-                    logger.warning("No expected text found")
-                    if self.current_phone_number:
-                        self.page.screenshot(path=f"photo/{self.current_phone_number}.png")
-                    break
-
-                # Strict mode: remove the executed text action from the map
                 if found_text in text_actions:
+                    if not found_text:
+                        logger.warning("No expected text found")
+                        if self.current_phone_number:
+                            # Save screenshot
+                            self.page.screenshot(path=f"photo/{self.current_phone_number}.png")
+
+                            # Save HTML document
+                            import os
+                            os.makedirs("html", exist_ok=True)
+                            html_content = self.page.content()
+                            with open(f"html/{self.current_phone_number}.html", "w", encoding="utf-8") as f:
+                                f.write(html_content)
+
+                        break
+
+                    # Strict mode: remove the executed text action from the map
                     del text_actions[found_text]
 
                 # If all actions are exhausted, break
@@ -551,106 +610,9 @@ def string_to_number_array(data_str):
 
 if __name__ == "__main__":
     nums_str = """
-    2250720090666
-    2250720093506
-    2250720091783
-    2250720093644
-    2250720091803
-    2250720093238
-    2250720092529
-    2250720097722
-    2250720091417
-    2250720096645
-    2250720097932
-    2250720092604
-    2250720096754
-    2250720099074
-    2250720092741
-    2250720097048
-    2250720093780
-    2250720096837
-    2250720095658
-    2250720094631
-    2250720092380
-    2250720096050
-    2250720091012
-    2250720097381
-    2250720095957
-    2250720096373
-    2250720090591
-    2250720094143
-    2250720099690
-    2250720095090
-    2250720098872
-    2250720098676
-    2250720099898
-    2250720097371
-    2250720097114
-    2250720091786
-    2250720093991
-    2250720093137
-    2250720090985
-    2250720092022
-    2250720096221
-    2250720095219
-    2250720093273
-    2250720091574
-    2250720097361
-    2250720092607
-    2250720093871
-    2250720092882
-    2250720099569
-    2250720092267
-    2250720093954
-    2250720090050
-    2250720093578
-    2250720095482
-    2250720095184
-    2250720092433
-    2250720096967
-    2250720095491
-    2250720091289
-    2250720098348
-    2250720096947
-    2250720093786
-    2250720090628
-    2250720091913
-    2250720097703
-    2250720091189
-    2250720098197
-    2250720096909
-    2250720094050
-    2250720092640
-    2250720096641
-    2250720094115
-    2250720092910
-    2250720099068
-    2250720091922
-    2250720096081
-    2250720091582
-    2250720091493
-    2250720092266
-    2250720097767
-    2250720096966
-    2250720092577
-    2250720091770
-    2250720095950
-    2250720096246
-    2250720091518
-    2250720092589
-    2250720093916
-    2250720094090
-    2250720098137
-    2250720091884
-    2250720097621
-    2250720097790
-    2250720096472
-    2250720095730
-    2250720093750
-    2250720097035
-    2250720095035
-    2250720095937
-    2250720097304
+    93799382186
+    93799384603
+    93799384608
     """
 
     nums = string_to_number_array(nums_str)

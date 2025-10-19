@@ -1,79 +1,121 @@
-# Facebook Number Checker - GUI Version
+# Facebook Number Checker - Build Instructions
 
-A modern, user-friendly GUI application for checking Facebook phone numbers.
+## Building the Windows Executable
 
-## Features
+This guide will help you create a standalone Windows executable (.exe) and installer for the Facebook Number Checker application.
 
-- **Modern GUI Interface**: Clean, dark-themed interface built with CustomTkinter
-- **Easy Input**: Paste phone numbers (one per line) into the text area
-- **Concurrent Processing**: Configure the number of workers for parallel checking
-- **Real-time Results**: Live updates showing success/failed numbers
-- **Detailed Logging**: View detailed logs of all operations
-- **Success Tracking**: Only counts numbers that reach the verification code page
+## Prerequisites
 
-## Installation
+1. **Install PyInstaller** (if not already installed):
+   ```bash
+   pip install pyinstaller
+   ```
 
-1. Install required packages:
+2. **Install Inno Setup** (for creating installer - optional):
+   - Download from: https://jrsoftware.org/isdl.php
+   - Install the software on your Windows machine
+
+## Method 1: Quick Build (Executable Only)
+
+~~### Step 1: Run the Build Script
+Simply run:
 ```bash
-pip install -r requirements.txt
+python build_exe.py
+```~~
+
+This will:
+- Clean old build files (optional)
+- Create a standalone executable
+- Place it in the `dist` folder
+
+### Step 2: Test the Executable
+After building, test the executable:
+```bash
+dist\FacebookChecker.exe
 ```
 
-## Usage
+## Method 2: Manual Build
 
-### Running the GUI
+If you prefer manual control:
 
-Simply run the GUI application:
 ```bash
-python gui.py
+pyinstaller --name=FacebookChecker --onefile --windowed --add-data=main.py;. --hidden-import=customtkinter --hidden-import=PIL._tkinter_finder --collect-all=customtkinter gui.py
 ```
 
-### How to Use
+## Method 3: Create Professional Installer
 
-1. **Enter Phone Numbers**: 
-   - Paste or type phone numbers in the left text area
-   - One phone number per line
-   - Example:
-     ```
-     2250708139166
-     2250708135432
-     2250708136329
-     ```
+After building the executable, create a professional installer:
 
-2. **Set Concurrent Workers**:
-   - Enter the number of concurrent workers (1-20)
-   - Default: 5 workers
-   - More workers = faster processing (but more resource intensive)
-
-3. **Click "Start Checking"**:
-   - The application will begin processing
-   - You can see real-time progress in the results section
-
-4. **View Results**:
-   - **Successful Numbers Tab**: Shows phone numbers that reached the verification code page
-   - **Failed Numbers Tab**: Shows numbers that failed with error messages
-   - **Log Tab**: Detailed log of all operations
-   - **Statistics**: See Total/Success/Failed counts at the top
-
-5. **Stop Processing** (optional):
-   - Click "Stop Checking" to halt processing
-   - Currently running tasks will finish first
-
-## Success Criteria
-
-A phone number is marked as **successful** ONLY if it:
-- Successfully reaches the Facebook verification code input page
-- This means Facebook can send a verification code to that number
-
-## Running the Old CLI Version
-
-If you prefer the command-line version:
+### Step 1: Build the Executable First
 ```bash
-python main.py
+python build_exe.py
 ```
+
+### Step 2: Create the Installer with Inno Setup
+1. Open Inno Setup Compiler
+2. File → Open → Select `installer_script.iss`
+3. Build → Compile
+4. Find the installer in `installer_output` folder
+
+The installer will be named: `FacebookChecker_Setup.exe`
+
+## What Gets Created
+
+### Executable Build:
+- `dist/FacebookChecker.exe` - Standalone executable (~100-150 MB)
+- No Python installation required on target machine
+- All dependencies bundled
+
+### Installer Build:
+- `installer_output/FacebookChecker_Setup.exe` - Windows installer
+- Creates Start Menu shortcuts
+- Optional Desktop shortcut
+- Proper uninstaller
+
+## Distributing Your Application
+
+### Option 1: Distribute the .exe only
+- Share `dist/FacebookChecker.exe`
+- Users double-click to run
+- No installation needed
+
+### Option 2: Distribute the Installer
+- Share `installer_output/FacebookChecker_Setup.exe`
+- Users run installer
+- Professional installation experience
+- Easy uninstallation
+
+## Troubleshooting
+
+### "Module not found" errors:
+Add the missing module to PyInstaller command:
+```bash
+--hidden-import=module_name
+```
+
+### Antivirus false positives:
+- Common with PyInstaller executables
+- Sign your executable with a code signing certificate
+- Or add exception in antivirus software
+
+### Large file size:
+- Normal for bundled executables
+- Contains Python runtime + all dependencies
+- To reduce: use `--onedir` instead of `--onefile`
+
+## Testing Checklist
+
+Before distributing:
+- [ ] Test on clean Windows machine (without Python)
+- [ ] Test all features (number checking, workers, headless mode)
+- [ ] Verify Chrome/ChromeDriver works
+- [ ] Check if antivirus blocks it
+- [ ] Test installer installation/uninstallation
 
 ## Notes
 
-- The application runs Chrome in headless mode (no visible browser)
-- Each check may take several seconds depending on Facebook's response time
-- Successful numbers are those that can receive verification codes
+- First run may be slower as Chrome driver sets up
+- Requires internet connection to access Facebook
+- Windows Defender may scan on first run
+- Chrome browser will be downloaded automatically if not present
 
