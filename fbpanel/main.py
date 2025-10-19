@@ -63,7 +63,6 @@ class FacebookNumberChecker:
         self.wait_timeout = wait_timeout * 1000
         self.playwright = None
         self.browser = None
-        self.context = None
         self.page = None
         self.current_phone_number = None
         self.continuation = True
@@ -91,15 +90,13 @@ class FacebookNumberChecker:
             ]
         )
 
-        self.context = self.browser.new_context(ignore_https_errors=True)
+        # Create a context to enable proper caching
+        context = self.browser.new_context()
+        self.page = context.new_page()
 
-        # Block unnecessary resources
-        self.context.route("**/*", lambda route: (
-            route.abort() if route.request.resource_type in ["image", "media", "stylesheet", "font"]
-            else route.continue_()
-        ))
+        # Remove route blocking to allow caching
+        # Resources will now be cached and loaded from memory-cache/disk cache
 
-        self.page = self.context.new_page()
         self.page.on("response", self._track_response)
         self.page.set_default_timeout(self.wait_timeout)
 
@@ -364,8 +361,6 @@ class FacebookNumberChecker:
             input("Enter to close")
 
             self.page.close()
-            if self.context:
-                self.context.close()
             if self.browser:
                 self.browser.close()
             if self.playwright:
@@ -455,8 +450,6 @@ def worker_process_numbers(worker_id, phone_queue, results_list, results_lock):
         input("Enter to finally close")
         if checker.page:
             checker.page.close()
-        if checker.context:
-            checker.context.close()
         if checker.browser:
             checker.browser.close()
         if checker.playwright:
