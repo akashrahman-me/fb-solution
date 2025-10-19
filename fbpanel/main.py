@@ -91,9 +91,17 @@ class FacebookNumberChecker:
                 '--silent',
             ]
         )
+        #
+        # proxy_config = {
+        #     'server': 'http://p.webshare.io:80',
+        #     'username': 'rqsgbzmp-rotate',
+        #     'password': 'yag0ewjl9tws'
+        # }
 
-        # Create a context to enable proper caching
-        self.context = self.browser.new_context()
+        # Create a context with proxy enabled for proper caching and proxy support
+        self.context = self.browser.new_context(
+            # proxy = proxy_config
+        )
         self.page = self.context.new_page()
 
         # Use CDP to accurately track network bandwidth
@@ -109,7 +117,7 @@ class FacebookNumberChecker:
 
         self.page.set_default_timeout(self.wait_timeout)
 
-        logger.info(f"Browser initialized (headless={self.headless})")
+        logger.info(f"Browser initialized (headless={self.headless}) with proxy")
 
     def _on_cdp_response(self, params):
         """Handle CDP Network.responseReceived event"""
@@ -550,11 +558,16 @@ def print_bandwidth_summary(num_results):
 
 if __name__ == "__main__":
     nums_str = """
-    93799382186
-    93799384603
-    93799384608
-    93799389192
-    93799381369
+    2250703070196
+    2250703074265
+    2250703075843
+    2250703070202
+    2250703079463
+    2250703077440
+    2250703074955
+    2250703077718
+    2250703079398
+    2250703071644
     """
 
     nums = string_to_number_array(nums_str)
