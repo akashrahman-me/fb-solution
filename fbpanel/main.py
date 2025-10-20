@@ -35,6 +35,7 @@ class Config:
     PROXY_SERVER = "http://127.0.0.1:8080"
     DEFAULT_TIMEOUT = 20  # seconds
     POLL_FREQUENCY = 0.3  # seconds
+    PROFILES_DIR = "profiles"  # Directory to store browser profiles
 
     # Browser arguments
     BROWSER_ARGS = [
@@ -55,6 +56,14 @@ class Config:
         os.makedirs(cls.CACHE_DIR, exist_ok=True)
         os.makedirs("photo", exist_ok=True)
         os.makedirs("html", exist_ok=True)
+        os.makedirs(cls.PROFILES_DIR, exist_ok=True)
+
+    @classmethod
+    def get_profile_path(cls, worker_id: int) -> str:
+        """Get the profile path for a specific worker"""
+        profile_path = os.path.join(cls.PROFILES_DIR, str(worker_id))
+        os.makedirs(profile_path, exist_ok=True)
+        return profile_path
 
 
 # ============================================================================
@@ -126,13 +135,14 @@ class ExpirationManager:
 class BrowserManager:
     """Manages browser lifecycle and configuration"""
 
-    def __init__(self, headless: bool = False, timeout: int = Config.DEFAULT_TIMEOUT):
+    def __init__(self, headless: bool = False, timeout: int = Config.DEFAULT_TIMEOUT, worker_id: int = 0):
         self.headless = headless
         self.timeout = timeout * 1000  # Convert to milliseconds
         self.playwright: Optional[Playwright] = None
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
+        self.worker_id = worker_id
 
     def start(self):
         """Initialize and start the browser"""
@@ -141,32 +151,42 @@ class BrowserManager:
         logger.info("Starting browser...")
         self.playwright = sync_playwright().start()
 
-        self.browser = self.playwright.chromium.launch(
+        # Get the full profile directory path
+        profile_path = Config.get_profile_path(self.worker_id)
+
+        # Check if profile exists
+        profile_exists = os.path.exists(os.path.join(profile_path, "Default"))
+
+        if profile_exists:
+            logger.info(f"Loading existing profile from: {profile_path}")
+        else:
+            logger.info(f"Creating new profile at: {profile_path}")
+
+        # Launch browser with persistent context (full profile)
+        self.context = self.playwright.chromium.launch_persistent_context(
+            profile_path,
             headless=self.headless,
-            args=Config.BROWSER_ARGS
+            args=Config.BROWSER_ARGS,
+            proxy={"server": Config.PROXY_SERVER},
+            viewport={"width": 1280, "height": 800}
         )
 
-        # Create context with proxy
-        proxy_config = {"server": Config.PROXY_SERVER}
-        self.context = self.browser.new_context(
-            proxy=proxy_config
-        )
-
-        # Create page
-        self.page = self.context.new_page()
+        # Get the first page (persistent context creates one automatically)
+        self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
         self.page.set_default_timeout(self.timeout)
 
-        logger.info(f"Browser initialized (headless={self.headless}) with proxy")
+        logger.info(f"Browser initialized (headless={self.headless}) with full profile at: {profile_path}")
 
     def close(self):
         """Close browser and cleanup resources"""
-        if self.page:
-            self.page.close()
-        if self.browser:
-            self.browser.close()
+        # With persistent context, everything is auto-saved
+        if self.context:
+            logger.info(f"Saving profile to: {Config.get_profile_path(self.worker_id)}")
+            self.context.close()
+            logger.info("Profile saved and browser closed")
+
         if self.playwright:
             self.playwright.stop()
-        logger.info("Browser closed")
 
     def get_page(self) -> Page:
         """Get the current page instance"""
@@ -279,17 +299,18 @@ class PageInteractor:
 class FacebookAccountChecker:
     """Main class for checking Facebook accounts"""
 
-    def __init__(self, headless: bool = False, wait_timeout: int = Config.DEFAULT_TIMEOUT):
+    def __init__(self, headless: bool = False, wait_timeout: int = Config.DEFAULT_TIMEOUT, worker_id: int = 0):
         ExpirationManager.ensure_not_expired()
 
-        self.browser_manager = BrowserManager(headless, wait_timeout)
+        self.browser_manager = BrowserManager(headless, wait_timeout, worker_id)
         self.page_interactor: Optional[PageInteractor] = None
         self.current_phone_number: Optional[str] = None
         self.continuation = True
         self.reached_success = False
         self.error_message: Optional[str] = None
+        self.worker_id = worker_id
 
-        logger.info("FacebookAccountChecker initialized")
+        logger.info(f"FacebookAccountChecker initialized for worker {worker_id}")
 
     def setup(self):
         """Setup browser and page interactor"""
@@ -555,11 +576,11 @@ class CheckerWorker:
             results_list: Shared list to store results
             results_lock: Lock for thread-safe results access
         """
-        self.checker = FacebookAccountChecker(headless=self.headless)
+        self.checker = FacebookAccountChecker(headless=self.headless, worker_id=self.worker_id)
 
         try:
             self.checker.setup()
-            logger.info(f"Worker {self.worker_id} browser ready")
+            logger.info(f"Worker {self.worker_id} browser ready with profile: profiles/{self.worker_id}")
 
             while True:
                 try:
@@ -729,23 +750,33 @@ def main():
 
     # Sample phone numbers for testing
     nums_str = """
-2250779359702
-2250779356403
-2250779354097
-2250779355845
-2250779354549
-2250779352567
-2250779350481
-2250779357023
-2250779354188
-2250779355447
+2250779356823
+2250779358638
+2250779355628
+2250779352996
+2250779355023
+2250779353379
+2250779351141
+2250779355355
+2250779359145
+2250779356641
+2250779356673
+2250779356640
+2250779359140
+2250779351052
+2250779351405
+2250779359511
+2250779357126
+2250779355726
+2250779358972
+2250779358189
     """
 
     # Parse phone numbers
     phone_numbers = parse_phone_numbers(nums_str)
 
     # Process numbers
-    processor = BatchProcessor(num_workers=2, headless=False)
+    processor = BatchProcessor(num_workers=5, headless=False)
     results = processor.process_numbers(phone_numbers)
 
     # Report results
