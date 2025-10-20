@@ -11,10 +11,20 @@ from urllib.parse import urlparse
 # --- Configuration ---
 LOCAL_PROXY_HOST = "127.0.0.1"
 LOCAL_PROXY_PORT = 8080
-REMOTE_SERVER = "p.webshare.io"
-REMOTE_PORT = 80
-REMOTE_USERNAME = "rqsgbzmp-rotate"
-REMOTE_PASSWORD = "yag0ewjl9tws"
+
+# Residential Proxy Credentials
+# ---------------------
+# REMOTE_SERVER = "p.webshare.io"
+# REMOTE_PORT = 80
+# REMOTE_USERNAME = "rqsgbzmp-rotate"
+# REMOTE_PASSWORD = "yag0ewjl9tws"
+
+# Datacenter Proxy Credentials
+# ---------------------
+REMOTE_SERVER = "142.111.48.253"
+REMOTE_PORT = 7030
+REMOTE_USERNAME = "lmmwyrac"
+REMOTE_PASSWORD = "fi17jsine73g"
 # ---------------------
 
 # Base64 encode the credentials

@@ -149,7 +149,7 @@ class BrowserManager:
         # Create context with proxy
         proxy_config = {"server": Config.PROXY_SERVER}
         self.context = self.browser.new_context(
-            # proxy=proxy_config
+            proxy=proxy_config
         )
 
         # Create page
@@ -324,7 +324,7 @@ class FacebookAccountChecker:
             elif self.error_message:
                 return CheckResult(phone_number, 'failed', self.error_message)
             else:
-                return CheckResult(phone_number, 'failed', 'Unknown error - didn\'t reach verification page')
+                return CheckResult(phone_number, 'failed', 'An unexpected error occurred')
 
         except Exception as e:
             logger.error(f"Error checking {phone_number}: {e}")
@@ -745,7 +745,7 @@ def main():
     phone_numbers = parse_phone_numbers(nums_str)
 
     # Process numbers
-    processor = BatchProcessor(num_workers=1, headless=False)
+    processor = BatchProcessor(num_workers=2, headless=False)
     results = processor.process_numbers(phone_numbers)
 
     # Report results
