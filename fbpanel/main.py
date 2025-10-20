@@ -168,8 +168,10 @@ class BrowserManager:
             headless=self.headless,
             args=Config.BROWSER_ARGS,
             proxy={"server": Config.PROXY_SERVER},
-            viewport={"width": 1280, "height": 800}
+            viewport={"width": 1280, "height": 600}
         )
+
+
 
         # Get the first page (persistent context creates one automatically)
         self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
@@ -360,6 +362,13 @@ class FacebookAccountChecker:
     def _navigate_to_recovery(self):
         """Navigate to Facebook account recovery page"""
         page = self.browser_manager.get_page()
+        context = self.browser_manager.context
+
+        # Clear cookies and storage before navigation
+        context.clear_cookies()
+        page.evaluate("localStorage.clear(); sessionStorage.clear();")
+        logger.info("Cleared cookies, localStorage, and sessionStorage")
+
         page.goto(Config.FB_LOGIN_IDENTIFY_URL)
 
     def _handle_flow(self):

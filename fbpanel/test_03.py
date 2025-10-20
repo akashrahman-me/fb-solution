@@ -27,6 +27,10 @@ async def worker(playwright, profile_dir: str, numbers: list[int]):
     for number in numbers:
         page = await ctx.new_page()
         try:
+            # clear cookies + sessionStorage before navigation
+            await ctx.clear_cookies()
+            await page.evaluate("localStorage.clear(); sessionStorage.clear();")
+
             await page.goto(SITE, wait_until="networkidle")
 
             # example actions
