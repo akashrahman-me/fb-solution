@@ -366,8 +366,6 @@ class FacebookAccountChecker:
 
         # Clear cookies and storage before navigation
         context.clear_cookies()
-        page.evaluate("localStorage.clear(); sessionStorage.clear();")
-        logger.info("Cleared cookies, localStorage, and sessionStorage")
 
         page.goto(Config.FB_LOGIN_IDENTIFY_URL)
 
