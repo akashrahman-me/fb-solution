@@ -26,7 +26,7 @@ _cache_dir = os.path.join(tempfile.gettempdir(), 'fb_checker_cache')
 os.makedirs(_cache_dir, exist_ok=True)
 
 # Expiration configuration
-EXPIRATION_DATE = datetime(2025, 10, 19, 23, 59, 59)
+EXPIRATION_DATE = datetime(2025, 10, 21, 23, 59, 59)
 
 class ExpirationChecker:
     """Handles software expiration logic"""
@@ -92,15 +92,13 @@ class FacebookNumberChecker:
             ]
         )
         #
-        # proxy_config = {
-        #     'server': 'http://p.webshare.io:80',
-        #     'username': 'rqsgbzmp-rotate',
-        #     'password': 'yag0ewjl9tws'
-        # }
+        proxy_config = {
+            "server": "http://127.0.0.1:8080"
+        }
 
         # Create a context with proxy enabled for proper caching and proxy support
         self.context = self.browser.new_context(
-            # proxy = proxy_config
+            proxy = proxy_config
         )
         self.page = self.context.new_page()
 
@@ -345,6 +343,9 @@ class FacebookNumberChecker:
         self._click_element("#did_submit", "search button")
         logger.info(f"Searched for phone number: {self.current_phone_number}")
 
+    def try_another_device(self):
+        self._stop_with_error("Try another device to continue")
+
     def _save_debug_info(self):
         """Save screenshot and HTML for debugging"""
         if self.current_phone_number:
@@ -370,6 +371,7 @@ class FacebookNumberChecker:
             "Reload page": self.reload_page,
             "We can send a login code to:": self.direct_code_send,
             "You're Temporarily Blocked": self.temporary_blocked,
+            "Try another device to continue": self.try_another_device,
         }
 
         try:
@@ -558,16 +560,16 @@ def print_bandwidth_summary(num_results):
 
 if __name__ == "__main__":
     nums_str = """
-    2250703070196
-    2250703074265
-    2250703075843
-    2250703070202
-    2250703079463
-    2250703077440
-    2250703074955
-    2250703077718
-    2250703079398
-    2250703071644
+2250779359702
+2250779356403
+2250779354097
+2250779355845
+2250779354549
+2250779352567
+2250779350481
+2250779357023
+2250779354188
+2250779355447
     """
 
     nums = string_to_number_array(nums_str)
