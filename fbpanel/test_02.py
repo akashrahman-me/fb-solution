@@ -1,6 +1,93 @@
+"""
+Phone Number Filter - Class-based implementation
+Filters out successful phone numbers from a list of numbers to check
+"""
+from typing import List, Set
 
 
-successful = """
+class PhoneNumberFilter:
+    """Handles filtering of phone numbers based on successful results"""
+
+    def __init__(self, successful_data: str = "", numbers_data: str = ""):
+        """
+        Initialize the filter with raw data
+
+        Args:
+            successful_data: Multi-line string with format "phone:code"
+            numbers_data: Multi-line string with phone numbers
+        """
+        self.successful_data = successful_data
+        self.numbers_data = numbers_data
+        self._successful_numbers: Set[str] = set()
+        self._all_numbers: List[str] = []
+        self._filtered_numbers: List[str] = []
+
+    def load_successful(self, data: str = None) -> 'PhoneNumberFilter':
+        """
+        Load successful phone numbers from data
+
+        Args:
+            data: Multi-line string with format "phone:code" (optional, uses init data if not provided)
+
+        Returns:
+            self for method chaining
+        """
+        data = data or self.successful_data
+        self._successful_numbers = {
+            line.split(":")[0].strip()
+            for line in data.splitlines()
+            if line.strip() and ":" in line
+        }
+        return self
+
+    def load_numbers(self, data: str = None) -> 'PhoneNumberFilter':
+        """
+        Load all phone numbers to check
+
+        Args:
+            data: Multi-line string with phone numbers (optional, uses init data if not provided)
+
+        Returns:
+            self for method chaining
+        """
+        data = data or self.numbers_data
+        self._all_numbers = [
+            line.strip()
+            for line in data.splitlines()
+            if line.strip()
+        ]
+        return self
+
+    def filter(self) -> 'PhoneNumberFilter':
+        """
+        Filter out successful numbers from all numbers
+
+        Returns:
+            self for method chaining
+        """
+        self._filtered_numbers = [
+            num for num in self._all_numbers
+            if num not in self._successful_numbers
+        ]
+        return self
+
+    def print_summary(self):
+        """Print a summary of the filtering"""
+        print(f"Total numbers: {len(self._all_numbers)}")
+        print(f"Successful numbers: {len(self._successful_numbers)}")
+        print(f"Remaining to check: {len(self._filtered_numbers)}")
+        print(f"\nFiltered numbers:")
+        for num in self._filtered_numbers:
+            print(num)
+
+
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
+
+if __name__ == "__main__":
+    # Sample data
+    successful = """
 2250705175430:453867
 2250797696937:053207
 2250797693376:558572
@@ -21,11 +108,7 @@ successful = """
 2250708337082:319213
 """
 
-
-# Extract only the numbers before the colon
-successful = [line.split(":")[0] for line in successful.splitlines() if line.strip()]
-
-numbers = """
+    numbers = """
 93799382186
 93799384603
 93799384608
@@ -54,16 +137,7 @@ numbers = """
 93799381516
 """
 
-# Split lines and remove empty ones
-numbers = [line.strip() for line in numbers.splitlines() if line.strip()]
+    filter_obj = PhoneNumberFilter(successful, numbers)
+    filter_obj.load_successful().load_numbers().filter()
 
-
-# Remove successful ones
-output = [num for num in numbers if num not in successful]
-
-# Join to string if needed
-output = "\n".join(output)
-
-print(output)
-
-
+    filter_obj.print_summary()
