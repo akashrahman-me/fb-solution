@@ -88,6 +88,7 @@ class CheckResult:
 class ExpirationManager:
     """Handles software expiration logic"""
     _warning_shown = False
+    _warning_lock = threading.Lock()
 
     @classmethod
     def check_expiration(cls) -> tuple[bool, str]:
@@ -114,8 +115,10 @@ class ExpirationManager:
 
         # Show warning if expiring soon
         if days_remaining <= 3 and not cls._warning_shown:
-            logger.warning(f"Software will expire in {days_remaining} days and {hours_remaining} hours!")
-            cls._warning_shown = True
+            with cls._warning_lock:
+                if not cls._warning_shown:  # Double-check after acquiring lock
+                    logger.warning(f"Software will expire in {days_remaining} days and {hours_remaining} hours!")
+                    cls._warning_shown = True
 
         message = f"Software expires on {Config.EXPIRATION_DATE.strftime('%B %d, %Y at %I:%M %p')}"
         return False, message
@@ -204,9 +207,10 @@ class BrowserManager:
 class PageInteractor:
     """Handles all page interactions and element operations"""
 
-    def __init__(self, page: Page, timeout: int):
+    def __init__(self, page: Page, timeout: int, worker_id: int = 0):
         self.page = page
         self.timeout = timeout
+        self.worker_id = worker_id
 
     def click_element(self, selector: str, description: str, use_alt: bool = False):
         """
@@ -280,8 +284,10 @@ class PageInteractor:
     def save_debug_info(self, phone_number: str):
         """Save screenshot and HTML for debugging"""
         try:
-            self.page.screenshot(path=f"photo/{phone_number}.png")
-            with open(f"html/{phone_number}.html", "w", encoding="utf-8") as f:
+            # Add worker_id to filename to prevent race conditions
+            filename = f"{phone_number}_worker{self.worker_id}"
+            self.page.screenshot(path=f"photo/{filename}.png")
+            with open(f"html/{filename}.html", "w", encoding="utf-8") as f:
                 f.write(self.page.content())
             logger.info(f"Debug info saved for {phone_number}")
         except Exception as e:
@@ -318,7 +324,7 @@ class FacebookAccountChecker:
         """Setup browser and page interactor"""
         self.browser_manager.start()
         page = self.browser_manager.get_page()
-        self.page_interactor = PageInteractor(page, self.browser_manager.timeout)
+        self.page_interactor = PageInteractor(page, self.browser_manager.timeout, self.worker_id)
 
     def close(self):
         """Cleanup resources"""
@@ -364,8 +370,9 @@ class FacebookAccountChecker:
         page = self.browser_manager.get_page()
         context = self.browser_manager.context
 
-        # Clear cookies and storage before navigation
+        # Clear only cookies before navigation
         context.clear_cookies()
+        logger.info("Cleared cookies")
 
         page.goto(Config.FB_LOGIN_IDENTIFY_URL)
 
@@ -586,6 +593,7 @@ class CheckerWorker:
         self.checker = FacebookAccountChecker(headless=self.headless, worker_id=self.worker_id)
 
         try:
+            # Setup browser ONCE for the entire worker session
             self.checker.setup()
             logger.info(f"Worker {self.worker_id} browser ready with profile: profiles/{self.worker_id}")
 
@@ -594,7 +602,14 @@ class CheckerWorker:
                     phone_number = phone_queue.get(timeout=1)
 
                     logger.info(f"Worker {self.worker_id} checking: {phone_number}")
-                    result = self.checker.check_number(phone_number)
+
+                    # Wrap check_number in try-except to prevent worker crash
+                    try:
+                        result = self.checker.check_number(phone_number)
+                    except Exception as check_error:
+                        logger.error(f"Worker {self.worker_id} error checking {phone_number}: {check_error}")
+                        result = CheckResult(phone_number, 'error', f'Check failed: {str(check_error)}')
+
                     self.phones_processed += 1
 
                     # Store result thread-safely
@@ -610,18 +625,16 @@ class CheckerWorker:
                     break
 
         except Exception as e:
-            logger.error(f"Worker {self.worker_id} error: {e}")
+            logger.error(f"Worker {self.worker_id} fatal error during setup: {e}")
         finally:
+            # Close browser ONCE at the end
             if self.checker:
-                self.checker.close()
+                try:
+                    logger.info(f"Worker {self.worker_id} closing browser after processing {self.phones_processed} numbers")
+                    self.checker.close()
+                except Exception as e:
+                    logger.error(f"Worker {self.worker_id} error closing browser: {e}")
 
-    @staticmethod
-    def run_worker(worker_id: int, phone_queue: queue.Queue,
-                   results_list: List[CheckResult], results_lock: threading.Lock,
-                   headless: bool = False):
-        """Static method to run worker (for threading)"""
-        worker = CheckerWorker(worker_id, headless)
-        worker.process_queue(phone_queue, results_list, results_lock)
 
 
 # ============================================================================

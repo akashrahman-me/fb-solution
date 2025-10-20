@@ -548,56 +548,77 @@ class FacebookCheckerGUI:
         # Get headless mode setting
         headless_mode = self.headless_var.get()
 
-        def check_single_number(phone_number, worker_id):
-            """Worker function to check a single phone number"""
-            if not self.is_running:
-                return None
+        # Use a queue to distribute work across workers
+        from queue import Queue as ThreadQueue
+        work_queue = ThreadQueue()
 
-            checker = FacebookAccountChecker(headless=headless_mode, worker_id=worker_id)
+        # Put all phone numbers in the queue
+        for phone in numbers:
+            work_queue.put(phone)
+
+        # Worker thread function - each thread gets its own Playwright instance
+        def worker_thread_func(worker_id):
+            """Each worker runs in its own thread with its own browser"""
+            checker = None
             try:
-                checker.setup()
-                result = checker.check_number(phone_number)
-                time.sleep(0.5)  # Small delay between checks
+                # Create checker in THIS thread (Playwright requirement)
+                checker = FacebookAccountChecker(headless=headless_mode, worker_id=worker_id)
+                checker.setup()  # Open browser ONCE in this thread
+                self.log_message(f"🌐 Worker {worker_id} browser ready")
 
-                return {
-                    'phone': result.phone,
-                    'status': result.status,
-                    'message': result.message
-                }
+                # Process numbers from the queue
+                while self.is_running:
+                    try:
+                        phone_number = work_queue.get(timeout=0.5)
+
+                        # Check the number
+                        try:
+                            result = checker.check_number(phone_number)
+                            self.results_queue.put({
+                                'phone': result.phone,
+                                'status': result.status,
+                                'message': result.message
+                            })
+                        except Exception as e:
+                            self.results_queue.put({
+                                'phone': phone_number,
+                                'status': 'error',
+                                'message': str(e)
+                            })
+
+                        work_queue.task_done()
+                        time.sleep(0.3)  # Small delay between checks
+
+                    except:
+                        # Queue empty, check if we should exit
+                        if work_queue.empty():
+                            break
+
             except Exception as e:
-                return {
-                    'phone': phone_number,
-                    'status': 'error',
-                    'message': str(e)
-                }
+                self.log_message(f"⚠️ Worker {worker_id} error: {e}")
             finally:
-                checker.close()
+                # Close browser in THIS thread
+                if checker:
+                    try:
+                        self.log_message(f"🔒 Worker {worker_id} closing browser")
+                        checker.close()
+                    except Exception as e:
+                        self.log_message(f"⚠️ Worker {worker_id} close error: {e}")
 
-        # Use ThreadPoolExecutor for concurrent checking
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            # Submit tasks with worker IDs
-            future_to_phone = {}
-            for idx, phone in enumerate(numbers):
-                worker_id = idx % workers  # Distribute phones across workers
-                future = executor.submit(check_single_number, phone, worker_id)
-                future_to_phone[future] = phone
+        # Create worker threads
+        worker_threads = []
+        for worker_id in range(workers):
+            thread = threading.Thread(
+                target=worker_thread_func,
+                args=(worker_id,),
+                daemon=True
+            )
+            thread.start()
+            worker_threads.append(thread)
 
-            # Collect results as they complete
-            for future in as_completed(future_to_phone):
-                if not self.is_running:
-                    break
-
-                phone = future_to_phone[future]
-                try:
-                    result = future.result()
-                    if result:
-                        self.results_queue.put(result)
-                except Exception as e:
-                    self.results_queue.put({
-                        'phone': phone,
-                        'status': 'error',
-                        'message': str(e)
-                    })
+        # Wait for all workers to complete
+        for thread in worker_threads:
+            thread.join()
 
         # Signal completion
         self.results_queue.put(None)
