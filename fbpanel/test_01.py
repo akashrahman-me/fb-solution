@@ -1,20 +1,32 @@
-from seleniumwire import webdriver
-from selenium.webdriver.chrome.options import Options
+import requests
 
-proxy = "http://user-akash_sAIls-country-US:83QcuHmvdK8_yrv@dc.oxylabs.io:8000"
+# Local proxy configuration
+LOCAL_PROXY = "http://127.0.0.1:8080"
 
-seleniumwire_options = {
-    'proxy': {
-        'http': proxy,
-        'https': proxy,
-        'no_proxy': 'localhost,127.0.0.1'
-    }
+proxies = {
+    "http": LOCAL_PROXY,
+    "https": LOCAL_PROXY
 }
 
-opts = Options()
-# add any chrome args you need, e.g. opts.add_argument('--disable-gpu')
-driver = webdriver.Chrome(options=opts, seleniumwire_options=seleniumwire_options)
+try:
+    print("Testing proxy connection...")
+    print(f"Using proxy: {LOCAL_PROXY}")
+    print("-" * 50)
 
-driver.get('https://api.ipify.org?format=json')   # quick IP check
-print(driver.page_source)
-driver.quit()
+    # Make request through the local proxy
+    response = requests.get("https://ipinfo.io/json", proxies=proxies, timeout=10)
+
+    if response.status_code == 200:
+        print("✓ Proxy is working!")
+        print("\nIP Information:")
+        print(response.text)
+    else:
+        print(f"✗ Error: Status code {response.status_code}")
+        print(response.text)
+
+except requests.exceptions.ProxyError as e:
+    print(f"✗ Proxy connection failed: {e}")
+except requests.exceptions.Timeout as e:
+    print(f"✗ Request timed out: {e}")
+except Exception as e:
+    print(f"✗ Error: {e}")
