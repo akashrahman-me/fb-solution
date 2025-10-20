@@ -17,10 +17,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global bandwidth tracking
-_total_bandwidth_lock = threading.Lock()
-_global_bandwidth_stats = {'total_sent': 0, 'total_received': 0, 'total_requests': 0}
-
 # Global cache directory
 _cache_dir = os.path.join(tempfile.gettempdir(), 'fb_checker_cache')
 os.makedirs(_cache_dir, exist_ok=True)
@@ -69,8 +65,6 @@ class FacebookNumberChecker:
         self.continuation = True
         self.reached_success = False
         self.error_message = None
-        self.network_requests = []
-        self.cdp_session = None
 
         logger.info("Session initialized")
 
@@ -102,92 +96,9 @@ class FacebookNumberChecker:
         )
         self.page = self.context.new_page()
 
-        # Use CDP to accurately track network bandwidth
-        self.cdp_session = self.context.new_cdp_session(self.page)
-        self.cdp_session.send('Network.enable')
-
-        # Listen to CDP Network events for accurate tracking
-        self.cdp_session.on('Network.responseReceived', self._on_cdp_response)
-        self.cdp_session.on('Network.loadingFinished', self._on_cdp_loading_finished)
-
-        # Store request IDs and their info
-        self.pending_requests = {}
-
         self.page.set_default_timeout(self.wait_timeout)
 
         logger.info(f"Browser initialized (headless={self.headless}) with proxy")
-
-    def _on_cdp_response(self, params):
-        """Handle CDP Network.responseReceived event"""
-        try:
-            request_id = params.get('requestId')
-            response = params.get('response', {})
-
-            # Check if response was served from cache
-            from_disk_cache = response.get('fromDiskCache', False)
-            from_service_worker = response.get('fromServiceWorker', False)
-            from_prefetch_cache = response.get('fromPrefetchCache', False)
-
-            # Skip cached resources
-            if from_disk_cache or from_service_worker or from_prefetch_cache:
-                return
-
-            # Store info for this request
-            self.pending_requests[request_id] = {
-                'url': response.get('url', ''),
-                'status': response.get('status', 0),
-                'headers': response.get('headers', {}),
-                'encoded_data_length': 0
-            }
-        except:
-            pass
-
-    def _on_cdp_loading_finished(self, params):
-        """Handle CDP Network.loadingFinished event"""
-        try:
-            request_id = params.get('requestId')
-            encoded_data_length = params.get('encodedDataLength', 0)
-
-            if request_id in self.pending_requests:
-                request_info = self.pending_requests[request_id]
-
-                # Skip data URLs
-                url = request_info['url']
-                if url.startswith('data:') or url.startswith('blob:'):
-                    del self.pending_requests[request_id]
-                    return
-
-                # Calculate actual bandwidth
-                # encodedDataLength includes headers + body as received over network
-                if encoded_data_length > 0:
-                    self.network_requests.append({
-                        'bytes_sent': 0,  # Request size is minimal (headers only)
-                        'bytes_received': encoded_data_length,
-                        'url': url,
-                        'status': request_info['status']
-                    })
-
-                # Clean up
-                del self.pending_requests[request_id]
-        except:
-            pass
-
-    def get_network_stats(self):
-        """Retrieve network statistics"""
-        return {
-            'bytes_sent': sum(req['bytes_sent'] for req in self.network_requests),
-            'bytes_received': sum(req['bytes_received'] for req in self.network_requests),
-            'requests_count': len(self.network_requests)
-        }
-
-    @staticmethod
-    def format_bytes(bytes_value):
-        """Convert bytes to human-readable format"""
-        for unit in ['B', 'KB', 'MB', 'GB']:
-            if bytes_value < 1024.0:
-                return f"{bytes_value:.2f} {unit}"
-            bytes_value /= 1024.0
-        return f"{bytes_value:.2f} TB"
 
     def _click_element(self, selector, description, use_alt=False):
         """Helper to click element with fallback"""
@@ -398,27 +309,9 @@ class FacebookNumberChecker:
         Image.open(BytesIO(screenshot_bytes)).show()
         logger.info("Screenshot preview opened")
 
-    def _log_bandwidth(self, stats):
-        """Log bandwidth usage"""
-        total = stats['bytes_sent'] + stats['bytes_received']
-        logger.info(f"Bandwidth: Sent={self.format_bytes(stats['bytes_sent'])}, "
-                   f"Received={self.format_bytes(stats['bytes_received'])}, "
-                   f"Total={self.format_bytes(total)}, Requests={stats['requests_count']}")
-
-    def _update_global_bandwidth(self, stats):
-        """Update global bandwidth statistics"""
-        with _total_bandwidth_lock:
-            _global_bandwidth_stats['total_sent'] += stats['bytes_sent']
-            _global_bandwidth_stats['total_received'] += stats['bytes_received']
-            _global_bandwidth_stats['total_requests'] += stats['requests_count']
-
     def close(self):
         """Clean up resources"""
         if self.page:
-            stats = self.get_network_stats()
-            self._log_bandwidth(stats)
-            self._update_global_bandwidth(stats)
-
             input("Enter to close")
 
             self.page.close()
@@ -483,16 +376,10 @@ def worker_process_numbers(worker_id, phone_queue, results_list, results_lock):
                 checker.continuation = True
                 checker.reached_success = False
                 checker.error_message = None
-                checker.network_requests = []
 
                 logger.info(f"Worker {worker_id} checking: {phone_number}")
                 result = checker.check_number(phone_number)
                 phones_processed += 1
-
-                # Log and update bandwidth
-                stats = checker.get_network_stats()
-                checker._log_bandwidth(stats)
-                checker._update_global_bandwidth(stats)
 
                 # Store result
                 with results_lock:
@@ -536,28 +423,6 @@ def print_summary(results):
         logger.info(f"{result['phone']}: {result['status']} - {result['message']}")
 
 
-def print_bandwidth_summary(num_results):
-    """Print total bandwidth usage"""
-    logger.info("=" * 50)
-    logger.info("TOTAL BANDWIDTH USAGE:")
-    logger.info("=" * 50)
-
-    total_sent = _global_bandwidth_stats['total_sent']
-    total_received = _global_bandwidth_stats['total_received']
-    total_bandwidth = total_sent + total_received
-
-    logger.info(f"Total Sent: {FacebookNumberChecker.format_bytes(total_sent)}")
-    logger.info(f"Total Received: {FacebookNumberChecker.format_bytes(total_received)}")
-    logger.info(f"Total Bandwidth: {FacebookNumberChecker.format_bytes(total_bandwidth)}")
-    logger.info(f"Total Requests: {_global_bandwidth_stats['total_requests']}")
-
-    if num_results > 0:
-        avg = total_bandwidth / num_results
-        logger.info(f"Average Bandwidth per Check: {FacebookNumberChecker.format_bytes(avg)}")
-
-    logger.info("=" * 50)
-
-
 if __name__ == "__main__":
     nums_str = """
 2250779359702
@@ -596,4 +461,3 @@ if __name__ == "__main__":
         worker.join()
 
     print_summary(results)
-    print_bandwidth_summary(len(results))
