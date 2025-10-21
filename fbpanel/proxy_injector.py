@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
 from datetime import datetime
+from collections import deque
 
 # --- Configuration ---
 LOCAL_PROXY_HOST = "127.0.0.1"
@@ -49,12 +50,21 @@ class ProxyStats:
         self.total_requests = 0
         self.start_time = datetime.now()
         self.lock = threading.Lock()
+        self.logs = deque(maxlen=100)  # Keep last 100 requests
 
-    def add_request(self, sent, received):
+    def add_request(self, sent, received, url=""):
         with self.lock:
             self.total_sent += sent
             self.total_received += received
             self.total_requests += 1
+            # Add log entry
+            self.logs.append({
+                'timestamp': datetime.now().strftime('%H:%M:%S'),
+                'url': url,
+                'sent': sent,
+                'received': received,
+                'total': sent + received
+            })
 
     def get_stats(self):
         with self.lock:
@@ -66,6 +76,10 @@ class ProxyStats:
                 'uptime_seconds': (datetime.now() - self.start_time).total_seconds()
             }
 
+    def get_logs(self):
+        with self.lock:
+            return list(self.logs)
+
 stats = ProxyStats()
 
 class StatsHandler(BaseHTTPRequestHandler):
@@ -76,6 +90,7 @@ class StatsHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/stats' or self.path == '/':
             data = stats.get_stats()
+            logs = stats.get_logs()
 
             # Format bytes
             def format_bytes(b):
@@ -84,7 +99,7 @@ class StatsHandler(BaseHTTPRequestHandler):
                 elif b >= 1024 * 1024:
                     return f"{b / (1024 * 1024):.2f} MB"
                 elif b >= 1024:
-                    return f"{b / 1024:.2f} KB"
+                    return f"{b / 1024:.1f} KB"
                 else:
                     return f"{b} B"
 
@@ -92,55 +107,87 @@ class StatsHandler(BaseHTTPRequestHandler):
             uptime_hours = int(uptime_minutes / 60)
             uptime_minutes = uptime_minutes % 60
 
+            # Generate log entries HTML
+            log_entries = ""
+            for log in reversed(logs):  # Show newest first
+                log_entries += f"""
+                    <div class="log-entry">
+                        <span class="log-time">{log['timestamp']}</span>
+                        <span class="log-url">🌐 {log['url']}</span>
+                        <span class="log-stats">
+                            <span class="log-upload">⬆️ {format_bytes(log['sent'])}</span>
+                            <span class="log-download">⬇️ {format_bytes(log['received'])}</span>
+                            <span class="log-total">✅ {format_bytes(log['total'])}</span>
+                        </span>
+                    </div>
+                """
+
             html = f"""
             <!DOCTYPE html>
             <html>
             <head>
                 <title>Proxy Stats</title>
                 <meta charset="utf-8">
-                <meta http-equiv="refresh" content="5">
+                <meta http-equiv="refresh" content="3">
                 <style>
+                    * {{
+                        box-sizing: border-box;
+                    }}
                     body {{
                         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                         margin: 0;
                         padding: 20px;
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
                         min-height: 100vh;
+                    }}
+                    .wrapper {{
+                        max-width: 1400px;
+                        margin: 0 auto;
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 20px;
                     }}
                     .container {{
                         background: white;
                         border-radius: 15px;
                         box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-                        padding: 40px;
-                        max-width: 600px;
-                        width: 100%;
+                        padding: 30px;
+                    }}
+                    .full-width {{
+                        grid-column: 1 / -1;
                     }}
                     h1 {{
                         color: #333;
                         margin-top: 0;
                         text-align: center;
                         font-size: 2em;
+                        margin-bottom: 20px;
+                    }}
+                    h2 {{
+                        color: #333;
+                        margin-top: 0;
+                        font-size: 1.5em;
+                        margin-bottom: 15px;
+                        border-bottom: 2px solid #667eea;
+                        padding-bottom: 10px;
                     }}
                     .stat-box {{
                         background: #f8f9fa;
                         border-left: 4px solid #667eea;
-                        padding: 20px;
-                        margin: 15px 0;
+                        padding: 15px 20px;
+                        margin: 10px 0;
                         border-radius: 5px;
                     }}
                     .stat-label {{
                         color: #666;
-                        font-size: 0.9em;
+                        font-size: 0.85em;
                         text-transform: uppercase;
                         letter-spacing: 1px;
                         margin-bottom: 5px;
                     }}
                     .stat-value {{
                         color: #333;
-                        font-size: 1.8em;
+                        font-size: 1.6em;
                         font-weight: bold;
                     }}
                     .total {{
@@ -155,47 +202,117 @@ class StatsHandler(BaseHTTPRequestHandler):
                     .info {{
                         text-align: center;
                         color: #666;
-                        margin-top: 30px;
-                        font-size: 0.9em;
+                        margin-top: 20px;
+                        font-size: 0.85em;
                     }}
                     .emoji {{
-                        font-size: 1.2em;
+                        font-size: 1.1em;
                         margin-right: 5px;
+                    }}
+                    .logs-container {{
+                        background: #1e1e1e;
+                        border-radius: 8px;
+                        padding: 15px;
+                        max-height: 600px;
+                        overflow-y: auto;
+                        font-family: 'Consolas', 'Monaco', monospace;
+                    }}
+                    .log-entry {{
+                        color: #d4d4d4;
+                        padding: 8px 10px;
+                        margin: 5px 0;
+                        background: #2d2d2d;
+                        border-radius: 4px;
+                        font-size: 0.9em;
+                        line-height: 1.6;
+                        border-left: 3px solid #667eea;
+                        display: flex;
+                        flex-direction: column;
+                        gap: 5px;
+                    }}
+                    .log-entry:hover {{
+                        background: #3d3d3d;
+                    }}
+                    .log-time {{
+                        color: #858585;
+                        font-size: 0.85em;
+                        font-weight: bold;
+                    }}
+                    .log-url {{
+                        color: #4ec9b0;
+                        word-break: break-all;
+                    }}
+                    .log-stats {{
+                        display: flex;
+                        gap: 15px;
+                        font-size: 0.9em;
+                    }}
+                    .log-upload {{
+                        color: #ffc107;
+                    }}
+                    .log-download {{
+                        color: #17a2b8;
+                    }}
+                    .log-total {{
+                        color: #28a745;
+                    }}
+                    .logs-container::-webkit-scrollbar {{
+                        width: 8px;
+                    }}
+                    .logs-container::-webkit-scrollbar-track {{
+                        background: #1e1e1e;
+                    }}
+                    .logs-container::-webkit-scrollbar-thumb {{
+                        background: #667eea;
+                        border-radius: 4px;
+                    }}
+                    @media (max-width: 968px) {{
+                        .wrapper {{
+                            grid-template-columns: 1fr;
+                        }}
                     }}
                 </style>
             </head>
             <body>
-                <div class="container">
-                    <h1>📊 Proxy Statistics</h1>
-                    
-                    <div class="stat-box total">
-                        <div class="stat-label"><span class="emoji">✅</span>Total Data</div>
-                        <div class="stat-value">{format_bytes(data['total_data'])}</div>
+                <div class="wrapper">
+                    <div class="container">
+                        <h1>📊 Proxy Statistics</h1>
+                        
+                        <div class="stat-box total">
+                            <div class="stat-label"><span class="emoji">✅</span>Total Data</div>
+                            <div class="stat-value">{format_bytes(data['total_data'])}</div>
+                        </div>
+                        
+                        <div class="stat-box upload">
+                            <div class="stat-label"><span class="emoji">⬆️</span>Total Uploaded</div>
+                            <div class="stat-value">{format_bytes(data['total_sent'])}</div>
+                        </div>
+                        
+                        <div class="stat-box download">
+                            <div class="stat-label"><span class="emoji">⬇️</span>Total Downloaded</div>
+                            <div class="stat-value">{format_bytes(data['total_received'])}</div>
+                        </div>
+                        
+                        <div class="stat-box">
+                            <div class="stat-label"><span class="emoji">🔢</span>Total Requests</div>
+                            <div class="stat-value">{data['total_requests']:,}</div>
+                        </div>
+                        
+                        <div class="stat-box">
+                            <div class="stat-label"><span class="emoji">⏱️</span>Uptime</div>
+                            <div class="stat-value">{uptime_hours}h {uptime_minutes}m</div>
+                        </div>
+                        
+                        <div class="info">
+                            Auto-refreshes every 3 seconds
+                        </div>
                     </div>
                     
-                    <div class="stat-box upload">
-                        <div class="stat-label"><span class="emoji">⬆️</span>Total Uploaded</div>
-                        <div class="stat-value">{format_bytes(data['total_sent'])}</div>
-                    </div>
-                    
-                    <div class="stat-box download">
-                        <div class="stat-label"><span class="emoji">⬇️</span>Total Downloaded</div>
-                        <div class="stat-value">{format_bytes(data['total_received'])}</div>
-                    </div>
-                    
-                    <div class="stat-box">
-                        <div class="stat-label"><span class="emoji">🔢</span>Total Requests</div>
-                        <div class="stat-value">{data['total_requests']:,}</div>
-                    </div>
-                    
-                    <div class="stat-box">
-                        <div class="stat-label"><span class="emoji">⏱️</span>Uptime</div>
-                        <div class="stat-value">{uptime_hours}h {uptime_minutes}m</div>
-                    </div>
-                    
-                    <div class="info">
-                        Auto-refreshes every 5 seconds<br>
-                        Stats Server: http://localhost:{STATS_SERVER_PORT}/stats
+                    <div class="container">
+                        <h2>📋 Live Request Logs</h2>
+                        <div class="logs-container">
+                            {log_entries if log_entries else '<div class="log-entry">No requests yet...</div>'}
+                        </div>
                     </div>
                 </div>
             </body>
@@ -213,6 +330,13 @@ class StatsHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps(data, indent=2).encode())
+
+        elif self.path == '/logs':
+            logs = stats.get_logs()
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(logs, indent=2).encode())
 
         else:
             self.send_response(404)
@@ -326,8 +450,8 @@ class ProxyThread(threading.Thread):
         """Print transfer statistics"""
         total = self.bytes_sent + self.bytes_received
         if total > 0:
-            # Update global stats
-            stats.add_request(self.bytes_sent, self.bytes_received)
+            # Update global stats with URL
+            stats.add_request(self.bytes_sent, self.bytes_received, self.url)
             print(f"🌐 {self.url} | ⬆️ {self.format_bytes(self.bytes_sent)} | ⬇️ {self.format_bytes(self.bytes_received)} | ✅ {self.format_bytes(total)}")
 
     def relay_data(self, client, upstream):
