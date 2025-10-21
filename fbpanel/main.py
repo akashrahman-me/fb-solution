@@ -33,7 +33,7 @@ class Config:
     EXPIRATION_DATE = datetime(2025, 10, 21, 23, 59, 59)
     CACHE_DIR = os.path.join(tempfile.gettempdir(), 'fb_checker_cache')
     PROXY_SERVER = "http://127.0.0.1:8080"
-    DEFAULT_TIMEOUT = 20  # seconds
+    DEFAULT_TIMEOUT = 60  # seconds
     POLL_FREQUENCY = 0.3  # seconds
     PROFILES_DIR = "profiles"  # Directory to store browser profiles
 

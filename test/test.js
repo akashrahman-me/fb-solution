@@ -1,6 +1,6 @@
 // Auto collection
 const KEY = "ivasms";
-if (confirm("Are you sure to clear memory?")) {
+if (localStorage.getItem(KEY) && confirm("Are you sure to clear memory?")) {
     localStorage.removeItem(KEY);
 }
 
@@ -17,7 +17,7 @@ setInterval(() => {
         const otpMatch = msg?.replace(/\D+/g, "");
 
         if (number && otpMatch) {
-            result.push(`${number}:${otpMatch}`);
+            result.push(`${number}  ${otpMatch}`);
         }
     });
 
@@ -34,9 +34,8 @@ setInterval(() => {
 (() => {
     let sms = localStorage.getItem(KEY) || "[]";
     sms = JSON.parse(sms);
-
+    console.log(`${sms.length} numbers`);
     const output = sms.join("\n");
-    console.log(output);
     copy(output);
 })();
 
@@ -48,6 +47,11 @@ setInterval(() => {
 
     async function waitUntilVanish(selector, interval = 300) {
         while (document.querySelector(selector)) {
+            await new Promise((r) => setTimeout(r, interval));
+        }
+    }
+    async function waitUntilVisible(selector, interval = 300) {
+        while (!document.querySelector(selector)?.checkVisibility()) {
             await new Promise((r) => setTimeout(r, interval));
         }
     }
@@ -77,12 +81,14 @@ setInterval(() => {
                 const addNumber = document.querySelector("button.btn.btn-primary.btn-block");
                 addNumber?.click();
 
+                await waitUntilVisible("img[src='https://www.ivasms.com/assets/img/icons/check-true.png']");
+
                 result.push(country);
-
-                await waitUntilVanish("#staticBackdropLabel");
-
                 console.log(`Added ${country?.toUpperCase()}`);
 
+                document.querySelector("[data-dismiss='modal']").click();
+
+                await delay(1000);
                 document.getElementById("LiveTestSMSBlocked").id = "LiveTestSMS";
             }
         }
@@ -90,3 +96,17 @@ setInterval(() => {
         await new Promise((r) => setTimeout(r, 500));
     }
 })();
+
+// Collect all numbers
+let allNumbers = [];
+setInterval(() => {
+    [...document.querySelectorAll(".MyNumber")].forEach((body) => {
+        const rangNumbers = [...body?.querySelectorAll("tr")]?.map((tr) => tr?.innerText?.trim());
+
+        if (rangNumbers) {
+            allNumbers = [...new Set([...allNumbers, ...rangNumbers])];
+        }
+    });
+}, 50);
+
+copy(allNumbers.join("\n"));
