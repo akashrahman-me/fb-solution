@@ -1,46 +1,50 @@
-// Auto collection
-const KEY = "ivasms";
-if (localStorage.getItem(KEY) && confirm("Are you sure to clear memory?")) {
-    localStorage.removeItem(KEY);
-}
+// Auto save OTPs
+javascript: (() => {
+    const KEY = "ivasms";
+    if (localStorage.getItem(KEY) && JSON.parse(localStorage.getItem(KEY))?.length > 0 && confirm("Are you sure to clear memory?")) {
+        localStorage.removeItem(KEY);
+    }
 
-setInterval(() => {
-    let sms = localStorage.getItem(KEY) || "[]";
-    sms = JSON.parse(sms);
+    setInterval(() => {
+        let sms = localStorage.getItem(KEY) || "[]";
+        sms = JSON.parse(sms);
 
-    const rows = document.querySelectorAll("#LiveTestSMS tr");
-    const result = [];
+        const rows = document.querySelectorAll("#LiveTestSMS tr");
+        const result = [];
 
-    rows.forEach((row) => {
-        const number = row.querySelector(".CopyText")?.innerText.trim();
-        const msg = row.querySelector("td:last-child")?.innerText.trim();
-        const otpMatch = msg?.replace(/\D+/g, "");
+        rows.forEach((row) => {
+            const number = row.querySelector(".CopyText")?.innerText.trim();
+            const msg = row.querySelector("td:last-child")?.innerText.trim();
+            const otpMatch = msg?.replace(/\D+/g, "");
 
-        if (number && otpMatch) {
-            result.push(`${number}  ${otpMatch}`);
-        }
-    });
+            if (number && otpMatch) {
+                result.push(`${number}  ${otpMatch} ${result.length}`);
+            }
+        });
 
-    result.forEach((item) => {
-        if (!sms.includes(item)) {
-            sms.push(item);
-            console.log(item);
-        }
-    });
-    localStorage.setItem(KEY, JSON.stringify(sms));
-}, 3000);
+        result.forEach((item) => {
+            if (!sms.includes(item)) {
+                sms.push(item);
+                console.log(item);
+            }
+        });
+        localStorage.setItem(KEY, JSON.stringify(sms));
+    }, 3000);
+})();
 
-// Reveal collection
-(() => {
+// Auto Copy OTPs
+javascript: (() => {
+    const KEY = "ivasms";
     let sms = localStorage.getItem(KEY) || "[]";
     sms = JSON.parse(sms);
     console.log(`${sms.length} numbers`);
-    const output = sms.join("\n");
-    copy(output);
+    setTimeout(() => {
+        navigator.clipboard.writeText(sms.join("\n"));
+    }, 1000);
 })();
 
-// Auto add number
-(async () => {
+// Auto add numbers
+javascript: (async () => {
     const searchCountry = "KYRGYZSTAN";
     const searchSid = "FACEBOOK";
     const result = [];
@@ -76,7 +80,7 @@ setInterval(() => {
                 const body = document.getElementById("LiveTestSMS");
                 body.id = "LiveTestSMSBlocked";
                 anchor.click();
-                await delay(1000);
+                await delay(3000);
 
                 const addNumber = document.querySelector("button.btn.btn-primary.btn-block");
                 addNumber?.click();
@@ -97,16 +101,30 @@ setInterval(() => {
     }
 })();
 
-// Collect all numbers
-let allNumbers = [];
-setInterval(() => {
-    [...document.querySelectorAll(".MyNumber")].forEach((body) => {
-        const rangNumbers = [...body?.querySelectorAll("tr")]?.map((tr) => tr?.innerText?.trim());
-
-        if (rangNumbers) {
-            allNumbers = [...new Set([...allNumbers, ...rangNumbers])];
+// Copy all numbers
+javascript: (async () => {
+    async function waitUntilExist(getElementFn, interval = 300) {
+        let el;
+        while (!(el = getElementFn())) {
+            await new Promise((r) => setTimeout(r, interval));
         }
-    });
-}, 50);
+        return el;
+    }
 
-copy(allNumbers.join("\n"));
+    const accordion = document.getElementById("accordion");
+    const cards = [...accordion.querySelectorAll(".card")].reverse();
+
+    for (const card of cards) {
+        const anchor = card.querySelector('a[data-id][onclick*="GetNumber"]');
+        anchor.click();
+        await waitUntilExist(() => card.querySelector(".MyNumber tr"));
+    }
+
+    let allNumbers = [];
+    [...document.querySelectorAll(".MyNumber")].forEach((body) => {
+        const rangNumbers = [...body.querySelectorAll("tr")].map((tr) => tr.innerText.trim());
+        allNumbers = [...new Set([...allNumbers, ...rangNumbers])];
+    });
+
+    navigator.clipboard.writeText(allNumbers.join("\n"));
+})();
