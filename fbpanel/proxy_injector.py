@@ -8,10 +8,14 @@ import threading
 import base64
 import re
 from urllib.parse import urlparse
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import json
+from datetime import datetime
 
 # --- Configuration ---
 LOCAL_PROXY_HOST = "127.0.0.1"
 LOCAL_PROXY_PORT = 8080
+STATS_SERVER_PORT = 8081
 
 # Residential Proxy Credentials
 # ---------------------
@@ -36,6 +40,189 @@ REMOTE_PASSWORD = "G8Vmo6ac"
 
 # Base64 encode the credentials
 PROXY_AUTH = base64.b64encode(f"{REMOTE_USERNAME}:{REMOTE_PASSWORD}".encode()).decode()
+
+# Global statistics
+class ProxyStats:
+    def __init__(self):
+        self.total_sent = 0
+        self.total_received = 0
+        self.total_requests = 0
+        self.start_time = datetime.now()
+        self.lock = threading.Lock()
+
+    def add_request(self, sent, received):
+        with self.lock:
+            self.total_sent += sent
+            self.total_received += received
+            self.total_requests += 1
+
+    def get_stats(self):
+        with self.lock:
+            return {
+                'total_sent': self.total_sent,
+                'total_received': self.total_received,
+                'total_data': self.total_sent + self.total_received,
+                'total_requests': self.total_requests,
+                'uptime_seconds': (datetime.now() - self.start_time).total_seconds()
+            }
+
+stats = ProxyStats()
+
+class StatsHandler(BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        # Suppress default logging
+        pass
+
+    def do_GET(self):
+        if self.path == '/stats' or self.path == '/':
+            data = stats.get_stats()
+
+            # Format bytes
+            def format_bytes(b):
+                if b >= 1024 * 1024 * 1024:
+                    return f"{b / (1024 * 1024 * 1024):.2f} GB"
+                elif b >= 1024 * 1024:
+                    return f"{b / (1024 * 1024):.2f} MB"
+                elif b >= 1024:
+                    return f"{b / 1024:.2f} KB"
+                else:
+                    return f"{b} B"
+
+            uptime_minutes = int(data['uptime_seconds'] / 60)
+            uptime_hours = int(uptime_minutes / 60)
+            uptime_minutes = uptime_minutes % 60
+
+            html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Proxy Stats</title>
+                <meta charset="utf-8">
+                <meta http-equiv="refresh" content="5">
+                <style>
+                    body {{
+                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        margin: 0;
+                        padding: 20px;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        min-height: 100vh;
+                    }}
+                    .container {{
+                        background: white;
+                        border-radius: 15px;
+                        box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+                        padding: 40px;
+                        max-width: 600px;
+                        width: 100%;
+                    }}
+                    h1 {{
+                        color: #333;
+                        margin-top: 0;
+                        text-align: center;
+                        font-size: 2em;
+                    }}
+                    .stat-box {{
+                        background: #f8f9fa;
+                        border-left: 4px solid #667eea;
+                        padding: 20px;
+                        margin: 15px 0;
+                        border-radius: 5px;
+                    }}
+                    .stat-label {{
+                        color: #666;
+                        font-size: 0.9em;
+                        text-transform: uppercase;
+                        letter-spacing: 1px;
+                        margin-bottom: 5px;
+                    }}
+                    .stat-value {{
+                        color: #333;
+                        font-size: 1.8em;
+                        font-weight: bold;
+                    }}
+                    .total {{
+                        border-left-color: #28a745;
+                    }}
+                    .upload {{
+                        border-left-color: #ffc107;
+                    }}
+                    .download {{
+                        border-left-color: #17a2b8;
+                    }}
+                    .info {{
+                        text-align: center;
+                        color: #666;
+                        margin-top: 30px;
+                        font-size: 0.9em;
+                    }}
+                    .emoji {{
+                        font-size: 1.2em;
+                        margin-right: 5px;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>📊 Proxy Statistics</h1>
+                    
+                    <div class="stat-box total">
+                        <div class="stat-label"><span class="emoji">✅</span>Total Data</div>
+                        <div class="stat-value">{format_bytes(data['total_data'])}</div>
+                    </div>
+                    
+                    <div class="stat-box upload">
+                        <div class="stat-label"><span class="emoji">⬆️</span>Total Uploaded</div>
+                        <div class="stat-value">{format_bytes(data['total_sent'])}</div>
+                    </div>
+                    
+                    <div class="stat-box download">
+                        <div class="stat-label"><span class="emoji">⬇️</span>Total Downloaded</div>
+                        <div class="stat-value">{format_bytes(data['total_received'])}</div>
+                    </div>
+                    
+                    <div class="stat-box">
+                        <div class="stat-label"><span class="emoji">🔢</span>Total Requests</div>
+                        <div class="stat-value">{data['total_requests']:,}</div>
+                    </div>
+                    
+                    <div class="stat-box">
+                        <div class="stat-label"><span class="emoji">⏱️</span>Uptime</div>
+                        <div class="stat-value">{uptime_hours}h {uptime_minutes}m</div>
+                    </div>
+                    
+                    <div class="info">
+                        Auto-refreshes every 5 seconds<br>
+                        Stats Server: http://localhost:{STATS_SERVER_PORT}/stats
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
+
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(html.encode('utf-8'))
+
+        elif self.path == '/json':
+            data = stats.get_stats()
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(data, indent=2).encode())
+
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+def start_stats_server():
+    """Start the stats HTTP server"""
+    server = HTTPServer((LOCAL_PROXY_HOST, STATS_SERVER_PORT), StatsHandler)
+    print(f"✓ Stats server started on http://{LOCAL_PROXY_HOST}:{STATS_SERVER_PORT}/stats")
+    server.serve_forever()
 
 class ProxyThread(threading.Thread):
     def __init__(self, client_socket, client_address):
@@ -139,6 +326,8 @@ class ProxyThread(threading.Thread):
         """Print transfer statistics"""
         total = self.bytes_sent + self.bytes_received
         if total > 0:
+            # Update global stats
+            stats.add_request(self.bytes_sent, self.bytes_received)
             print(f"🌐 {self.url} | ⬆️ {self.format_bytes(self.bytes_sent)} | ⬇️ {self.format_bytes(self.bytes_received)} | ✅ {self.format_bytes(total)}")
 
     def relay_data(self, client, upstream):
@@ -186,6 +375,11 @@ def start_proxy_server():
         
         print(f"✓ Proxy server started on {LOCAL_PROXY_HOST}:{LOCAL_PROXY_PORT}")
         print(f"✓ Forwarding to: {REMOTE_SERVER}:{REMOTE_PORT}")
+
+        # Start stats server in a separate thread
+        stats_thread = threading.Thread(target=start_stats_server, daemon=True)
+        stats_thread.start()
+
         print(f"✓ Press Ctrl+C to stop\n")
         
         while True:
