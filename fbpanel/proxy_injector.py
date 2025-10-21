@@ -6,6 +6,7 @@ import socket
 import select
 import threading
 import base64
+import re
 from urllib.parse import urlparse
 
 # --- Configuration ---
@@ -42,6 +43,9 @@ class ProxyThread(threading.Thread):
         self.client = client_socket
         self.client_address = client_address
         self.daemon = True
+        self.bytes_sent = 0
+        self.bytes_received = 0
+        self.url = ""
 
     def run(self):
         try:
@@ -51,7 +55,10 @@ class ProxyThread(threading.Thread):
                 return
 
             request_str = request.decode('latin-1', errors='ignore')
-            print(f"\n[{self.client_address[0]}] Request:\n{request_str.split('\\r\\n')[0]}")
+
+            # Extract URL from request
+            self.url = self.extract_url(request_str)
+            self.bytes_sent += len(request)
 
             # Add Proxy-Authorization header if not present
             lines = request_str.split('\r\n')
@@ -62,14 +69,12 @@ class ProxyThread(threading.Thread):
                 lines.insert(1, f'Proxy-Authorization: Basic {PROXY_AUTH}')
                 request_str = '\r\n'.join(lines)
                 request = request_str.encode('latin-1')
-                print(f"[{self.client_address[0]}] Added Proxy-Authorization header")
 
             # Connect to the upstream proxy
             upstream = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             upstream.settimeout(10)
             
             try:
-                print(f"[{self.client_address[0]}] Connecting to upstream proxy {REMOTE_SERVER}:{REMOTE_PORT}")
                 upstream.connect((REMOTE_SERVER, REMOTE_PORT))
                 
                 # Send the modified request to upstream proxy
@@ -79,21 +84,62 @@ class ProxyThread(threading.Thread):
                 self.relay_data(self.client, upstream)
                 
             except socket.timeout:
-                print(f"[{self.client_address[0]}] Connection to upstream proxy timed out")
                 self.client.send(b"HTTP/1.1 504 Gateway Timeout\r\n\r\n")
             except ConnectionRefusedError:
-                print(f"[{self.client_address[0]}] Upstream proxy refused connection")
                 self.client.send(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
             except Exception as e:
-                print(f"[{self.client_address[0]}] Error connecting to upstream: {e}")
                 self.client.send(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
             finally:
                 upstream.close()
                 
         except Exception as e:
-            print(f"[{self.client_address[0]}] Error: {e}")
+            pass
         finally:
             self.client.close()
+            self.print_stats()
+
+    def extract_url(self, request_str):
+        """Extract URL from HTTP request"""
+        try:
+            lines = request_str.split('\r\n')
+            if lines:
+                first_line = lines[0]
+                parts = first_line.split(' ')
+                if len(parts) >= 2:
+                    method = parts[0]
+                    url = parts[1]
+
+                    # If it's a CONNECT request (HTTPS), format it
+                    if method == 'CONNECT':
+                        return f"https://{url}"
+                    # If URL is absolute, use it
+                    elif url.startswith('http'):
+                        return url
+                    # Otherwise, try to find Host header
+                    else:
+                        for line in lines[1:]:
+                            if line.lower().startswith('host:'):
+                                host = line.split(':', 1)[1].strip()
+                                return f"http://{host}{url}"
+                        return url
+        except:
+            pass
+        return "unknown"
+
+    def format_bytes(self, bytes_count):
+        """Format bytes to appropriate unit (Bytes, KB, or MB)"""
+        if bytes_count >= 1024 * 1024:  # >= 1MB
+            return f"{bytes_count / (1024 * 1024):.1f}MB"
+        elif bytes_count >= 1024:  # >= 1KB
+            return f"{bytes_count / 1024:.1f}KB"
+        else:  # < 1KB
+            return f"{bytes_count}B"
+
+    def print_stats(self):
+        """Print transfer statistics"""
+        total = self.bytes_sent + self.bytes_received
+        if total > 0:
+            print(f"🌐 {self.url} | ⬆️ {self.format_bytes(self.bytes_sent)} | ⬇️ {self.format_bytes(self.bytes_received)} | ✅ {self.format_bytes(total)}")
 
     def relay_data(self, client, upstream):
         """Relay data between client and upstream proxy"""
@@ -118,13 +164,15 @@ class ProxyThread(threading.Thread):
                         
                         if sock is client:
                             upstream.send(data)
+                            self.bytes_sent += len(data)
                         else:
                             client.send(data)
+                            self.bytes_received += len(data)
                     except:
                         return
                         
         except Exception as e:
-            print(f"Relay error: {e}")
+            pass
 
 
 def start_proxy_server():
@@ -156,4 +204,3 @@ def start_proxy_server():
 
 if __name__ == "__main__":
     start_proxy_server()
-
