@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 class Config:
     """Central configuration for the application"""
-    EXPIRATION_DATE = datetime(2025, 10, 21, 23, 59, 59)
+    EXPIRATION_DATE = datetime(2025, 11, 21, 23, 59, 59)
     CACHE_DIR = os.path.join(tempfile.gettempdir(), 'fb_checker_cache')
     PROXY_SERVER = "http://127.0.0.1:8080"
     DEFAULT_TIMEOUT = 60  # seconds
@@ -170,7 +170,9 @@ class BrowserManager:
             profile_path,
             headless=self.headless,
             args=Config.BROWSER_ARGS,
-            proxy={"server": Config.PROXY_SERVER},
+            proxy={
+                "server": Config.PROXY_SERVER
+            },
             viewport={"width": 1280, "height": 600}
         )
 
@@ -502,6 +504,7 @@ class FacebookAccountChecker:
         self.continuation = False
         self.reached_success = True
         logger.info("Verification code input page reached")
+        time.sleep(30)
 
     def _handle_disabled(self):
         """Handle disabled account"""

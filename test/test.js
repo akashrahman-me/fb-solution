@@ -38,6 +38,7 @@ javascript: (() => {
     let sms = localStorage.getItem(KEY) || "[]";
     sms = JSON.parse(sms);
     console.log(`${sms.length} numbers`);
+    copy(sms.join("\n"));
     setTimeout(() => {
         navigator.clipboard.writeText(sms.join("\n"));
     }, 1000);
@@ -45,7 +46,10 @@ javascript: (() => {
 
 // Auto add numbers
 javascript: (async () => {
-    const searchCountry = "KYRGYZSTAN";
+    const storageSearchCountry = JSON.parse(localStorage.getItem("search_country") || "[]");
+    const searchCountry = prompt("Country name", storageSearchCountry.join(",")).split(",");
+    localStorage.setItem("search_country", JSON.stringify(searchCountry));
+
     const searchSid = "FACEBOOK";
     const result = [];
 
@@ -72,11 +76,9 @@ javascript: (async () => {
             const country = anchor?.innerText.trim();
             const sid = row.querySelector("td .fw-semi-bold.ms-2")?.innerText.trim();
 
-            if (
-                country?.toLowerCase()?.includes(searchCountry.toLowerCase()) &&
-                sid?.toLowerCase()?.includes(searchSid.toLowerCase()) &&
-                !result.includes(country)
-            ) {
+            const found = searchCountry.some((c) => country?.toLowerCase().includes(c?.toLowerCase()));
+
+            if (found && sid?.toLowerCase()?.includes(searchSid?.toLowerCase()) && !result.includes(country)) {
                 const body = document.getElementById("LiveTestSMS");
                 body.id = "LiveTestSMSBlocked";
                 anchor.click();
@@ -127,4 +129,16 @@ javascript: (async () => {
     });
 
     navigator.clipboard.writeText(allNumbers.join("\n"));
+})();
+
+// Stop toggle
+javascript: (() => {
+    const liveTestSMS = document.getElementById("LiveTestSMS");
+    const liveTestSMSBlocked = document.getElementById("LiveTestSMSBlocked");
+
+    if (liveTestSMS) {
+        liveTestSMS.id = "LiveTestSMSBlocked";
+    } else if (liveTestSMSBlocked) {
+        liveTestSMSBlocked.id = "LiveTestSMS";
+    }
 })();
