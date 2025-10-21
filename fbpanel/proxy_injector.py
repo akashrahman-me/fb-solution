@@ -14,17 +14,23 @@ LOCAL_PROXY_PORT = 8080
 
 # Residential Proxy Credentials
 # ---------------------
-# REMOTE_SERVER = "p.webshare.io"
-# REMOTE_PORT = 80
-# REMOTE_USERNAME = "rqsgbzmp-rotate"
-# REMOTE_PASSWORD = "yag0ewjl9tws"
+REMOTE_SERVER = "aus.360s5.com"
+REMOTE_PORT = 3600
+REMOTE_USERNAME = "75072370-zone-custom-region-KG"
+REMOTE_PASSWORD = "G8Vmo6ac"
+# Residential Proxy Credentials
+# ---------------------
+# REMOTE_SERVER = "aus.360s5.com"
+# REMOTE_PORT = 3600
+# REMOTE_USERNAME = "75072370-zone-custom"
+# REMOTE_PASSWORD = "G8Vmo6ac"
 
 # Datacenter Proxy Credentials
 # ---------------------
-REMOTE_SERVER = "142.111.48.253"
-REMOTE_PORT = 7030
-REMOTE_USERNAME = "lmmwyrac"
-REMOTE_PASSWORD = "fi17jsine73g"
+# REMOTE_SERVER = "142.111.48.253"
+# REMOTE_PORT = 7030
+# REMOTE_USERNAME = "lmmwyrac"
+# REMOTE_PASSWORD = "fi17jsine73g"
 # ---------------------
 
 # Base64 encode the credentials

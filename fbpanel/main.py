@@ -692,6 +692,7 @@ class BatchProcessor:
 class ResultsReporter:
     """Handles reporting and display of results"""
 
+
     @staticmethod
     def print_summary(results: List[CheckResult]):
         """Print a summary of all results"""
