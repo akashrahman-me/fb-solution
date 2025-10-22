@@ -3,8 +3,12 @@ import threading
 from queue import Queue
 import time
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from main import FacebookAccountChecker, ExpirationManager, CheckResult, Config
+from main import (
+    process_phone_numbers,
+    check_expiration,
+    ensure_directories,
+    EXPIRATION_DATE
+)
 
 # Set appearance mode and color theme
 ctk.set_appearance_mode("dark")
@@ -57,10 +61,17 @@ class FacebookCheckerGUI:
         self.root.geometry("1400x850")
 
         # Ensure directories exist
-        Config.ensure_directories()
+        ensure_directories()
 
         # Check expiration before starting GUI
-        expired, message = ExpirationManager.check_expiration()
+        try:
+            check_expiration()
+            expired = False
+            message = self.get_expiration_message()
+        except Exception as e:
+            expired = True
+            message = str(e)
+
         if expired:
             self.show_expiration_error(message)
             return
@@ -89,6 +100,19 @@ class FacebookCheckerGUI:
         }
 
         self.setup_ui()
+
+    def get_expiration_message(self):
+        """Get expiration message"""
+        if EXPIRATION_DATE is None:
+            return "No expiration"
+
+        now = datetime.now()
+        days_remaining = (EXPIRATION_DATE - now).days
+
+        if days_remaining <= 3:
+            return f"Expires in {days_remaining} days"
+        else:
+            return f"Valid until {EXPIRATION_DATE.strftime('%B %d, %Y')}"
 
     def show_expiration_error(self, message):
         """Show expiration error with modern design"""
@@ -544,84 +568,31 @@ class FacebookCheckerGUI:
         self.headless_switch.configure(state="normal")
 
     def check_numbers_thread(self, numbers, workers):
-        """Thread function to check phone numbers"""
+        """Thread function to check phone numbers using functional API with real-time callback"""
         # Get headless mode setting
         headless_mode = self.headless_var.get()
 
-        # Use a queue to distribute work across workers
-        from queue import Queue as ThreadQueue
-        work_queue = ThreadQueue()
+        # Define callback function that will be called for each result
+        def result_callback(result):
+            """Called by main.py worker threads when each result is ready"""
+            if self.is_running:  # Only add if still running
+                self.results_queue.put(result)
 
-        # Put all phone numbers in the queue
-        for phone in numbers:
-            work_queue.put(phone)
-
-        # Worker thread function - each thread gets its own Playwright instance
-        def worker_thread_func(worker_id):
-            """Each worker runs in its own thread with its own browser"""
-            checker = None
-            try:
-                # Create checker in THIS thread (Playwright requirement)
-                checker = FacebookAccountChecker(headless=headless_mode, worker_id=worker_id)
-                checker.setup()  # Open browser ONCE in this thread
-                self.log_message(f"🌐 Worker {worker_id} browser ready")
-
-                # Process numbers from the queue
-                while self.is_running:
-                    try:
-                        phone_number = work_queue.get(timeout=0.5)
-
-                        # Check the number
-                        try:
-                            result = checker.check_number(phone_number)
-                            self.results_queue.put({
-                                'phone': result.phone,
-                                'status': result.status,
-                                'message': result.message
-                            })
-                        except Exception as e:
-                            self.results_queue.put({
-                                'phone': phone_number,
-                                'status': 'error',
-                                'message': str(e)
-                            })
-
-                        work_queue.task_done()
-                        time.sleep(0.3)  # Small delay between checks
-
-                    except:
-                        # Queue empty, check if we should exit
-                        if work_queue.empty():
-                            break
-
-            except Exception as e:
-                self.log_message(f"⚠️ Worker {worker_id} error: {e}")
-            finally:
-                # Close browser in THIS thread
-                if checker:
-                    try:
-                        self.log_message(f"🔒 Worker {worker_id} closing browser")
-                        checker.close()
-                    except Exception as e:
-                        self.log_message(f"⚠️ Worker {worker_id} close error: {e}")
-
-        # Create worker threads
-        worker_threads = []
-        for worker_id in range(workers):
-            thread = threading.Thread(
-                target=worker_thread_func,
-                args=(worker_id,),
-                daemon=True
+        try:
+            # Use the functional API from main.py with callback
+            results = process_phone_numbers(
+                numbers,
+                num_workers=workers,
+                headless=headless_mode,
+                callback=result_callback  # This enables real-time updates
             )
-            thread.start()
-            worker_threads.append(thread)
 
-        # Wait for all workers to complete
-        for thread in worker_threads:
-            thread.join()
+            # Signal completion
+            self.results_queue.put(None)
 
-        # Signal completion
-        self.results_queue.put(None)
+        except Exception as e:
+            self.log_message(f"❌ Error during checking: {e}")
+            self.results_queue.put(None)
 
     def update_ui(self):
         """Update UI with results from the queue"""
