@@ -3,6 +3,7 @@ Facebook Account Checker - Simplified Functional Version
 A beginner-friendly tool to check if phone numbers are associated with Facebook accounts
 """
 
+
 import time
 import os
 import queue
@@ -11,8 +12,10 @@ from datetime import datetime
 from playwright.sync_api import sync_playwright
 import logging
 import shutil
+import random
 
 from utils.normalize_text import normalize_text
+import proxy_injector
 
 # ============================================================================
 # CONFIGURATION & SETUP
@@ -27,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Global configuration
-EXPIRATION_DATE = datetime(2025, 11, 21, 23, 59, 59)
+EXPIRATION_DATE = datetime(2025, 10, 22, 21, 59, 59)
 PROXY_SERVER = "http://127.0.0.1:8080"
 TIMEOUT = 30000  # milliseconds
 POLL_INTERVAL = 0.3  # seconds
@@ -42,16 +45,43 @@ BROWSER_ARGS = [
     '--disable-gpu',
     '--log-level=3',
     '--silent',
+    # Enable disk cache
+    '--disk-cache-size=104857600',  # 100MB cache
+    '--media-cache-size=104857600',  # 100MB media cache
 ]
 
 # Thread-safe expiration warning
 _expiration_warning_shown = False
 _warning_lock = threading.Lock()
 
+# Proxy server state
+_proxy_thread = None
+_proxy_started = False
+_proxy_lock = threading.Lock()
+
 
 # ============================================================================
 # UTILITY FUNCTIONS
 # ============================================================================
+
+def start_proxy_server():
+    """Start the proxy server in a background thread"""
+    global _proxy_thread, _proxy_started
+
+    with _proxy_lock:
+        if _proxy_started:
+            logger.info("Proxy server already running")
+            return
+
+        logger.info("Starting proxy server in background...")
+        _proxy_thread = threading.Thread(target=proxy_injector.start_proxy_server, daemon=True)
+        _proxy_thread.start()
+        _proxy_started = True
+
+        # Give the proxy server a moment to start up
+        time.sleep(2)
+        logger.info("Proxy server started successfully")
+
 
 def ensure_directories():
     """Create necessary directories if they don't exist"""
@@ -109,6 +139,42 @@ def save_debug_info(page, phone_number, worker_id):
         logger.error(f"Error saving debug info: {e}")
 
 
+def random_user_agent():
+    """Generate a random user agent"""
+    user_agents = [
+        # Windows Chrome (v141)
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+        # Windows Chrome (v140)
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+        # Windows Edge (v141)
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.3537.85",
+        # Windows Firefox
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:144.0) Gecko/20100101 Firefox/144.0",
+        # macOS Chrome (v141) - Note: macOS version is often "frozen" at 10_15_7 for privacy
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+        # macOS Safari (v26) - Note: Uses the modern macOS version (e.g., 15_7)
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+        # Android Chrome (v141 on Android 14)
+        "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36",
+        # Android Chrome (v141, "frozen" Android 10 string for privacy)
+        "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36",
+    ]
+    return random.choice(user_agents)
+
+
+def random_viewport():
+    """Generate a random viewport size"""
+    viewports = [
+        {"width": 1920, "height": 1080},  # Full HD
+        {"width": 1366, "height": 768},   # Common laptop
+        {"width": 1536, "height": 864},   # Common laptop
+        {"width": 1440, "height": 900},   # MacBook
+        {"width": 1280, "height": 720},   # HD
+        {"width": 2560, "height": 1440},  # 2K
+    ]
+    return random.choice(viewports)
+
+
 # ============================================================================
 # BROWSER MANAGEMENT
 # ============================================================================
@@ -130,9 +196,13 @@ def create_browser(worker_id, headless=False):
     context = playwright.chromium.launch_persistent_context(
         profile_path,
         headless=headless,
-        args=BROWSER_ARGS,
+        args=BROWSER_ARGS + [
+            '--disable-blink-features=AutomationControlled',
+            '--exclude-switches=enable-automation',
+            '--disable-infobars',
+        ],
         proxy={"server": PROXY_SERVER},
-        viewport={"width": 1280, "height": 600}
+        viewport=random_viewport()
     )
 
     page = context.pages[0] if context.pages else context.new_page()
@@ -140,6 +210,48 @@ def create_browser(worker_id, headless=False):
 
     # Set default navigation to not wait for images/stylesheets
     page.set_default_navigation_timeout(TIMEOUT)
+
+    # Comprehensive stealth scripts to hide automation
+    user_agent = random_user_agent()
+
+    stealth_script = f"""
+        // Override navigator properties
+        Object.defineProperty(navigator, 'userAgent', {{
+            get: () => '{user_agent}'
+        }});
+        
+        Object.defineProperty(navigator, 'webdriver', {{
+            get: () => undefined
+        }});
+        
+        Object.defineProperty(navigator, 'plugins', {{
+            get: () => [1, 2, 3, 4, 5]
+        }});
+        
+        Object.defineProperty(navigator, 'languages', {{
+            get: () => ['en-US', 'en']
+        }});
+        
+        // Remove automation traces
+        window.navigator.chrome = {{
+            runtime: {{}}
+        }};
+        
+        // Override permissions
+        const originalQuery = window.navigator.permissions.query;
+        window.navigator.permissions.query = (parameters) => (
+            parameters.name === 'notifications' ?
+                Promise.resolve({{ state: Notification.permission }}) :
+                originalQuery(parameters)
+        );
+        
+        // Hide webdriver property
+        delete navigator.__proto__.webdriver;
+    """
+
+    page.add_init_script(stealth_script)
+    logger.info(f"Worker {worker_id}: User agent set to {user_agent}")
+    logger.info(f"Worker {worker_id}: Stealth mode enabled")
 
     logger.info(f"Worker {worker_id}: Browser initialized")
 
@@ -314,14 +426,30 @@ TEXT_GET_CODE_RESET = "How do you want to get the code to reset your password?"
 TEXT_SEND_LOGIN_CODE = "We can send a login code to:"
 TEXT_RELOAD_PAGE = "Reload page"
 
-def check_phone_number(page, phone_number, worker_id):
+def check_phone_number(page, phone_number, worker_id, clear_cache=False):
     """
     Check a single phone number on Facebook
     Returns: (success: bool, message: str)
+
+    Args:
+        page: Playwright page object
+        phone_number: Phone number to check
+        worker_id: Worker ID for debugging
+        clear_cache: If True, clears cookies/storage (default: False to keep cache)
     """
     try:
+        # Clear cookies and storage only if requested (to appear as new user)
+        # NOTE: Setting clear_cache=False preserves HTTP cache for bandwidth saving
+        if clear_cache:
+            page.context.clear_cookies()
+
+            # Clear localStorage and sessionStorage
+            try:
+                page.evaluate("() => { localStorage.clear(); sessionStorage.clear(); }")
+            except:
+                pass
+
         # Navigate to recovery page (don't wait for all resources to load)
-        page.context.clear_cookies()
         page.goto(FB_RECOVERY_URL, wait_until="domcontentloaded")
 
         # List of all possible texts we might encounter
@@ -509,6 +637,9 @@ def process_phone_numbers(phone_numbers, num_workers=1, headless=False, callback
     Returns:
         List of results dictionaries
     """
+    # Start proxy server in background
+    start_proxy_server()
+
     ensure_directories()
     check_expiration()
 
@@ -578,6 +709,99 @@ def main():
 
     # Sample phone numbers for testing
     phone_numbers_text = """
+        998992608371
+998992603001
+998992607726
+998992604633
+998992606010
+998992607620
+998992606191
+998992604759
+998992600926
+998992606195
+998992605762
+998992609282
+998992608874
+998992607830
+998992608977
+998992609553
+998992609445
+998992605681
+998992601383
+998992607468
+998992602444
+998992600586
+998992600986
+998992607825
+998992604723
+998992606209
+998992606221
+998992604145
+998992604858
+998992607610
+998992608136
+998992605528
+998992603894
+998992600045
+998992605705
+998992605722
+998992607533
+998992606834
+998992609210
+998992609905
+998992604815
+998992604581
+998992605322
+998992604928
+998992605962
+998992602198
+998992603252
+998992602422
+998992607311
+998992602176
+998992604447
+998992601384
+998992602509
+998992607125
+998992601925
+998992600221
+998992609330
+998992604451
+998992604850
+998992609941
+998992605819
+998992602378
+998992603977
+998992602512
+998992601259
+998992604506
+998992602134
+998992604309
+998992601508
+998992609141
+998992608051
+998992601238
+998992602229
+998992605629
+998992602914
+998992604548
+998992602643
+998992605649
+998992600970
+998992608924
+998992603577
+998992606775
+998992604016
+998992607034
+998992603236
+998992606638
+998992608976
+998992605843
+998992606962
+998992609739
+998992606302
+998992602593
+998992604478
 998992602481
 998992608982
 998992608839
@@ -594,7 +818,7 @@ def main():
     results = process_phone_numbers(
         phone_numbers=phone_numbers,
         num_workers=1,
-        headless=True
+        headless=False
     )
 
     # Display results

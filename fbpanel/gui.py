@@ -7,6 +7,7 @@ from main import (
     process_phone_numbers,
     check_expiration,
     ensure_directories,
+    start_proxy_server,
     EXPIRATION_DATE
 )
 
@@ -98,6 +99,9 @@ class FacebookCheckerGUI:
             'text_secondary': '#94a3b8',
             'border': '#334155'
         }
+
+        # Start the proxy server
+        start_proxy_server()
 
         self.setup_ui()
 

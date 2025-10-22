@@ -18,26 +18,22 @@ LOCAL_PROXY_HOST = "127.0.0.1"
 LOCAL_PROXY_PORT = 8080
 STATS_SERVER_PORT = 8081
 
+# Bandwidth limit: abort requests if response exceeds this size
+MAX_RESPONSE_SIZE = 128 * 1024 * 1024
+
 # Residential Proxy Credentials
 # ---------------------
 REMOTE_SERVER = "aus.360s5.com"
 REMOTE_PORT = 3600
-REMOTE_USERNAME = "75072370-zone-custom-region-KG"
+REMOTE_USERNAME = "75072370-zone-custom"
 REMOTE_PASSWORD = "G8Vmo6ac"
-# Residential Proxy Credentials
-# ---------------------
-# REMOTE_SERVER = "aus.360s5.com"
-# REMOTE_PORT = 3600
-# REMOTE_USERNAME = "75072370-zone-custom"
-# REMOTE_PASSWORD = "G8Vmo6ac"
 
 # Datacenter Proxy Credentials
 # ---------------------
-# REMOTE_SERVER = "142.111.48.253"
-# REMOTE_PORT = 7030
-# REMOTE_USERNAME = "lmmwyrac"
-# REMOTE_PASSWORD = "fi17jsine73g"
-# ---------------------
+# REMOTE_SERVER = "31.59.20.176"
+# REMOTE_PORT = 6754
+# REMOTE_USERNAME = "rtoamiym"
+# REMOTE_PASSWORD = "l2otu1msw0uq"
 
 # Base64 encode the credentials
 PROXY_AUTH = base64.b64encode(f"{REMOTE_USERNAME}:{REMOTE_PASSWORD}".encode()).decode()
@@ -277,37 +273,37 @@ class StatsHandler(BaseHTTPRequestHandler):
                 <div class="wrapper">
                     <div class="container">
                         <h1>📊 Proxy Statistics</h1>
-                        
+
                         <div class="stat-box total">
                             <div class="stat-label"><span class="emoji">✅</span>Total Data</div>
                             <div class="stat-value">{format_bytes(data['total_data'])}</div>
                         </div>
-                        
+
                         <div class="stat-box upload">
                             <div class="stat-label"><span class="emoji">⬆️</span>Total Uploaded</div>
                             <div class="stat-value">{format_bytes(data['total_sent'])}</div>
                         </div>
-                        
+
                         <div class="stat-box download">
                             <div class="stat-label"><span class="emoji">⬇️</span>Total Downloaded</div>
                             <div class="stat-value">{format_bytes(data['total_received'])}</div>
                         </div>
-                        
+
                         <div class="stat-box">
                             <div class="stat-label"><span class="emoji">🔢</span>Total Requests</div>
                             <div class="stat-value">{data['total_requests']:,}</div>
                         </div>
-                        
+
                         <div class="stat-box">
                             <div class="stat-label"><span class="emoji">⏱️</span>Uptime</div>
                             <div class="stat-value">{uptime_hours}h {uptime_minutes}m</div>
                         </div>
-                        
+
                         <div class="info">
                             Auto-refreshes every 3 seconds
                         </div>
                     </div>
-                    
+
                     <div class="container">
                         <h2>📋 Live Request Logs</h2>
                         <div class="logs-container">
@@ -393,7 +389,7 @@ class ProxyThread(threading.Thread):
                 
                 # Relay data between client and upstream proxy
                 self.relay_data(self.client, upstream)
-                
+
             except socket.timeout:
                 self.client.send(b"HTTP/1.1 504 Gateway Timeout\r\n\r\n")
             except ConnectionRefusedError:
@@ -455,11 +451,13 @@ class ProxyThread(threading.Thread):
             print(f"🌐 {self.url} | ⬆️ {self.format_bytes(self.bytes_sent)} | ⬇️ {self.format_bytes(self.bytes_received)} | ✅ {self.format_bytes(total)}")
 
     def relay_data(self, client, upstream):
-        """Relay data between client and upstream proxy"""
+        """Relay data between client and upstream proxy with size limit"""
         try:
             sockets = [client, upstream]
             timeout = 60
-            
+            response_size = 0
+            size_limit_exceeded = False
+
             while True:
                 readable, _, exceptional = select.select(sockets, [], sockets, timeout)
                 
@@ -476,9 +474,21 @@ class ProxyThread(threading.Thread):
                             return
                         
                         if sock is client:
+                            # Data from client to upstream (request)
                             upstream.send(data)
                             self.bytes_sent += len(data)
                         else:
+                            # Data from upstream to client (response)
+                            response_size += len(data)
+
+                            # Check if response exceeds size limit
+                            if response_size > MAX_RESPONSE_SIZE:
+                                if not size_limit_exceeded:
+                                    size_limit_exceeded = True
+                                    print(f"⚠️  {self.url} | Response size exceeded {MAX_RESPONSE_SIZE / 1024}KB limit - Aborting download")
+                                # Stop receiving more data from upstream
+                                return
+
                             client.send(data)
                             self.bytes_received += len(data)
                     except:
@@ -492,11 +502,11 @@ def start_proxy_server():
     """Start the local proxy server"""
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    
+
     try:
         server.bind((LOCAL_PROXY_HOST, LOCAL_PROXY_PORT))
         server.listen(100)
-        
+
         print(f"✓ Proxy server started on {LOCAL_PROXY_HOST}:{LOCAL_PROXY_PORT}")
         print(f"✓ Forwarding to: {REMOTE_SERVER}:{REMOTE_PORT}")
 
@@ -505,12 +515,12 @@ def start_proxy_server():
         stats_thread.start()
 
         print(f"✓ Press Ctrl+C to stop\n")
-        
+
         while True:
             client_socket, client_address = server.accept()
             proxy_thread = ProxyThread(client_socket, client_address)
             proxy_thread.start()
-            
+
     except KeyboardInterrupt:
         print("\n\nShutting down proxy server...")
     except Exception as e:
@@ -522,3 +532,4 @@ def start_proxy_server():
 
 if __name__ == "__main__":
     start_proxy_server()
+
