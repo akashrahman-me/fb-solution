@@ -242,7 +242,7 @@ def handle_find_account(page, phone_number):
 
 def handle_select_account(page):
     """Select the account from search results"""
-    click_element(page, "//a[contains(text(), 'This is my account')]", "account confirmation")
+    click_element(page, "//a[contains(translate(normalize-space(text()), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'this is my account')]", "account confirmation")
 
 
 def handle_recovery_method(page, phone_number):
@@ -305,6 +305,7 @@ TEXT_ACCOUNT_DISABLED = "Account disabled"
 TEXT_CAPTCHA_REQUIRED = "Before we send the code, enter these letters and numbers"
 TEXT_TEMPORARILY_BLOCKED = "You're Temporarily Blocked"
 TEXT_TRY_ANOTHER_DEVICE = "Try another device to continue"
+TEXT_TRY_ANOTHER_WAY = "Try another way"
 TEXT_COOKIE_CONSENT = "Allow the use of cookies from Facebook on this browser?"
 TEXT_FIND_YOUR_ACCOUNT = "Find Your Account"
 TEXT_ACCOUNTS_MATCHED = "These accounts matched your search"
@@ -342,6 +343,7 @@ def check_phone_number(page, phone_number, worker_id):
             TEXT_LOG_IN_TO,  # ACTION
             TEXT_SEND_LOGIN_CODE,  # ACTION
             TEXT_RELOAD_PAGE,  # ACTION
+            TEXT_TRY_ANOTHER_WAY,  # ACTION
         ]
 
         # Process flow - maximum 20 attempts
@@ -400,11 +402,16 @@ def check_phone_number(page, phone_number, worker_id):
                 all_possible_texts.remove(TEXT_RECEIVE_CODE_RESET)
                 all_possible_texts.remove(TEXT_GET_CODE_RESET)
 
-            if found_text == TEXT_LOG_IN_AS or found_text == TEXT_LOG_IN_TO:
+            if found_text == TEXT_TRY_ANOTHER_WAY:
                 logger.info("Action: Trying another way")
                 handle_try_another_way(page)
-                all_possible_texts.remove(TEXT_LOG_IN_AS)
-                all_possible_texts.remove(TEXT_LOG_IN_TO)
+                all_possible_texts.remove(TEXT_TRY_ANOTHER_WAY)
+
+            # if found_text == TEXT_LOG_IN_AS or found_text == TEXT_LOG_IN_TO:
+            #     logger.info("Action: Trying another way")
+            #     handle_try_another_way(page)
+            #     all_possible_texts.remove(TEXT_LOG_IN_AS)
+            #     all_possible_texts.remove(TEXT_LOG_IN_TO)
 
             if found_text == TEXT_SEND_LOGIN_CODE:
                 logger.info("Action: Clicking continue")
