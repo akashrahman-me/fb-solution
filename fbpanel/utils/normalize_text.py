@@ -16,11 +16,12 @@ def normalize_text(s: str) -> str:
     s = s.encode("ascii", "ignore").decode("ascii")
     return s.strip().lower()
 
-# Example
-a = "You’re Temporarily Blocked"
-b = "You're Temporarily Blocked"
+if __name__ == "__main__":
+    # Example
+    a = "You’re Temporarily Blocked"
+    b = "You're Temporarily Blocked"
 
-if normalize_text(a) == normalize_text(b):
-    print("Same")
-else:
-    print("Different")
+    if normalize_text(a) == normalize_text(b):
+        print("Same")
+    else:
+        print("Different")
