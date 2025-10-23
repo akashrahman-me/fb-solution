@@ -1,26 +1,12 @@
-import unicodedata
+import re
 
-def normalize_text(s: str) -> str:
-    # Replace smart quotes, dashes, etc.
-    replacements = {
-        "’": "'", "‘": "'", "‛": "'", "‚": "'",
-        "“": '"', "”": '"', "„": '"', "‟": '"',
-        "–": "-", "—": "-", "―": "-",
-        "…": "...",
-    }
-    for k, v in replacements.items():
-        s = s.replace(k, v)
+with open("test_03.txt", "r", encoding="utf-8") as f:
+    content = f.read()
+    lines = content.split("\n")
 
-    # Normalize and reduce to ASCII
-    s = unicodedata.normalize("NFKD", s)
-    s = s.encode("ascii", "ignore").decode("ascii")
-    return s.strip().lower()
+    for line in lines:
+        if "blocked" in line:
+            match = re.search(r"\b\d{10,15}\b", line)
+            if match:
+                print(match.group())
 
-# Example
-a = "You’re Temporarily Blocked"
-b = "You're Temporarily Blocked"
-
-if normalize_text(a) == normalize_text(b):
-    print("Same")
-else:
-    print("Different")

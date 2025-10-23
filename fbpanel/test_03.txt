@@ -1,0 +1,115 @@
+[20:56:16] 🚀 Starting verification for 95 numbers with 20 workers
+[20:56:28] ❌ FAILED: 996502094008 - Facebook account not found
+[20:56:32] ❌ FAILED: 996502092935 - Facebook account not found
+[20:56:32] ❌ FAILED: 996709097699 - Facebook account not found
+[20:56:32] ❌ FAILED: 996709093800 - Facebook account not found
+[20:56:32] ❌ FAILED: 996502098839 - Facebook account not found
+[20:56:32] ❌ FAILED: 996502099036 - Facebook account not found
+[20:56:32] ❌ FAILED: 996709094900 - You're temporarily blocked
+[20:56:34] ❌ FAILED: 996709098096 - You're temporarily blocked
+[20:56:34] ❌ FAILED: 996709091573 - You're temporarily blocked
+[20:56:34] ❌ FAILED: 996709099740 - You're temporarily blocked
+[20:56:35] ❌ FAILED: 996502095003 - You're temporarily blocked
+[20:56:36] ❌ FAILED: 996709093575 - You're temporarily blocked
+[20:56:36] ❌ FAILED: 996709097636 - Facebook account not found
+[20:56:37] ❌ FAILED: 996502091586 - Account is disabled
+[20:56:38] ❌ FAILED: 996502096399 - Facebook account not found
+[20:56:38] ❌ FAILED: 996709096894 - Facebook account not found
+[20:56:38] ❌ FAILED: 996502092930 - Facebook account not found
+[20:56:38] ❌ FAILED: 996709096214 - Facebook account not found
+[20:56:41] ❌ FAILED: 996709098250 - Facebook account not found
+[20:56:42] ❌ FAILED: 996502093534 - You're temporarily blocked
+[20:56:42] ❌ FAILED: 996501310662 - You're temporarily blocked
+[20:56:43] ❌ FAILED: 996501316910 - Facebook account not found
+[20:56:43] ❌ FAILED: 996502092390 - You're temporarily blocked
+[20:56:43] ❌ FAILED: 996501311791 - Facebook account not found
+[20:56:44] ❌ FAILED: 996501315222 - Facebook account not found
+[20:56:46] ❌ FAILED: 996709096148 - You're temporarily blocked
+[20:56:48] ❌ FAILED: 996705833659 - Facebook account not found
+[20:56:49] ❌ FAILED: 996705838765 - You're temporarily blocked
+[20:56:49] ❌ FAILED: 996502097047 - Error: Page.goto: Timeout 30000ms exceeded.
+Call log:
+  - navigating to "https://www.facebook.com/login/identify/", waiting until "domcontentloaded"
+
+[20:56:50] ❌ FAILED: 996501314992 - Facebook account not found
+[20:56:50] ❌ FAILED: 996501318699 - You're temporarily blocked
+[20:56:51] ❌ FAILED: 996501317525 - You're temporarily blocked
+[20:56:52] ❌ FAILED: 996705837348 - You're temporarily blocked
+[20:56:52] ❌ FAILED: 996705830896 - Facebook account not found
+[20:56:57] ❌ FAILED: 996709099742 - You're temporarily blocked
+[20:56:57] ❌ FAILED: 996705834828 - Facebook account not found
+[20:56:57] ✅ SUCCESS: 996709091676 - Verification code page reached
+[20:56:57] ✅ SUCCESS: 996709097091 - Verification code page reached
+[20:56:57] ✅ SUCCESS: 996709096537 - Verification code page reached
+[20:56:58] ❌ FAILED: 996705830884 - You're temporarily blocked
+[20:56:59] ✅ SUCCESS: 996501313925 - Verification code page reached
+[20:56:59] ❌ FAILED: 996705839979 - Account is disabled
+[20:56:59] ❌ FAILED: 996705831566 - You're temporarily blocked
+[20:57:01] ❌ FAILED: 996705837285 - Facebook account not found
+[20:57:02] ✅ SUCCESS: 996501313551 - Verification code page reached
+[20:57:03] ✅ SUCCESS: 996502098652 - Verification code page reached
+[20:57:04] ❌ FAILED: 996706996523 - You're temporarily blocked
+[20:57:05] ❌ FAILED: 996705831413 - You're temporarily blocked
+[20:57:05] ❌ FAILED: 996706740939 - Facebook account not found
+[20:57:06] ❌ FAILED: 996706998448 - You're temporarily blocked
+[20:57:06] ❌ FAILED: 996706996988 - Facebook account not found
+[20:57:06] ❌ FAILED: 996501312959 - Error: Page.goto: Timeout 30000ms exceeded.
+Call log:
+  - navigating to "https://www.facebook.com/login/identify/", waiting until "domcontentloaded"
+
+[20:57:11] ❌ FAILED: 996706741120 - Facebook account not found
+[20:57:13] ❌ FAILED: 996706993579 - Facebook account not found
+[20:57:14] ❌ FAILED: 996706749245 - Facebook account not found
+[20:57:14] ❌ FAILED: 996500578353 - You're temporarily blocked
+[20:57:16] ❌ FAILED: 996500571607 - Account is disabled
+[20:57:16] ❌ FAILED: 996706998399 - Can't find the 'Send code via SMS' option
+[20:57:16] ❌ FAILED: 996500570171 - Facebook account not found
+[20:57:16] ❌ FAILED: 996706742038 - Facebook account not found
+[20:57:21] ❌ FAILED: 996705837899 - Error: Page.goto: Timeout 30000ms exceeded.
+Call log:
+  - navigating to "https://www.facebook.com/login/identify/", waiting until "domcontentloaded"
+
+[20:57:21] ❌ FAILED: 996505099662 - You're temporarily blocked
+[20:57:22] ❌ FAILED: 996505097168 - Facebook account not found
+[20:57:25] ❌ FAILED: 996500577313 - Account is disabled
+[20:57:25] ❌ FAILED: 996500576151 - You're temporarily blocked
+[20:57:25] ❌ FAILED: 996505099141 - Facebook account not found
+[20:57:26] ❌ FAILED: 996505093582 - Facebook account not found
+[20:57:27] ✅ SUCCESS: 996706996098 - Verification code page reached
+[20:57:28] ❌ FAILED: 996706995503 - You're temporarily blocked
+[20:57:28] ❌ FAILED: 996509156752 - You're temporarily blocked
+[20:57:29] ✅ SUCCESS: 996706746753 - Verification code page reached
+[20:57:30] ❌ FAILED: 996501316368 - Unexpected page state
+[20:57:30] ❌ FAILED: 996705833328 - Unexpected page state
+[20:57:30] ❌ FAILED: 996509154078 - Facebook account not found
+[20:57:30] ❌ FAILED: 996509155969 - Facebook account not found
+[20:57:30] ❌ FAILED: 996509157730 - Facebook account not found
+[20:57:30] ❌ FAILED: 996505093483 - Account is disabled
+[20:57:31] ❌ FAILED: 996509157890 - You're temporarily blocked
+[20:57:32] ❌ FAILED: 996505098917 - Facebook account not found
+[20:57:33] ❌ FAILED: 996706995830 - Unexpected page state
+[20:57:34] ❌ FAILED: 996706742882 - Error: Page.goto: Timeout 30000ms exceeded.
+Call log:
+  - navigating to "https://www.facebook.com/login/identify/", waiting until "domcontentloaded"
+
+[20:57:35] ❌ FAILED: 996703228623 - You're temporarily blocked
+[20:57:35] ❌ FAILED: 996509152093 - Facebook account not found
+[20:57:36] ❌ FAILED: 996500571446 - Error: Page.goto: Timeout 30000ms exceeded.
+Call log:
+  - navigating to "https://www.facebook.com/login/identify/", waiting until "domcontentloaded"
+
+[20:57:38] ❌ FAILED: 996509159862 - Facebook account not found
+[20:57:39] ❌ FAILED: 996703226074 - You're temporarily blocked
+[20:57:40] ✅ SUCCESS: 996505098778 - Verification code page reached
+[20:57:40] ❌ FAILED: 996703226371 - Facebook account not found
+[20:57:41] ✅ SUCCESS: 996500575722 - Verification code page reached
+[20:57:42] ❌ FAILED: 996703222491 - Account is disabled
+[20:57:44] ❌ FAILED: 996703226427 - You're temporarily blocked
+[20:57:47] ❌ FAILED: 996706749993 - Unexpected page state
+[20:57:53] ❌ FAILED: 996501319050 - Unexpected page state
+[20:58:00] ❌ FAILED: 996703228181 - Error: Page.goto: Timeout 30000ms exceeded.
+Call log:
+  - navigating to "https://www.facebook.com/login/identify/", waiting until "domcontentloaded"
+
+[20:58:02] ✅ SUCCESS: 996703223647 - Verification code page reached
+[20:58:03] ✅ All checks completed! Success: 11, Failed: 84

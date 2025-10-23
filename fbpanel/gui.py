@@ -42,6 +42,7 @@ class StatCard(ctk.CTkFrame):
         )
         self.value_label.pack(pady=(15, 5))
 
+
         # Title
         self.title_label = ctk.CTkLabel(
             self,
@@ -357,8 +358,8 @@ class FacebookCheckerGUI:
         )
         self.workers_spinbox.pack(side="left")
 
-        # Headless toggle
-        self.headless_var = ctk.BooleanVar(value=True)
+        # Headless toggle (default OFF so browsers are visible)
+        self.headless_var = ctk.BooleanVar(value=False)
         self.headless_switch = ctk.CTkSwitch(
             control_inner,
             text="🎭 Headless Mode",
@@ -556,14 +557,14 @@ class FacebookCheckerGUI:
         thread.start()
 
         # Start UI update loop
-        self.root.after(100, self.update_ui)
+        self.root.after(100, lambda: self.update_ui())
 
     def stop_checking(self):
         """Stop the checking process"""
         self.is_running = False
-        self.log_message("⏸️ Stopping... (current tasks will finish)")
+        self.log_message("\u23f8\ufe0f Stopping... (current tasks will finish)")
         self.start_button.configure(
-            text="🚀 Start Verification",
+            text="\ud83d\ude80 Start Verification",
             fg_color=self.colors['success'],
             hover_color="#059669"
         )
@@ -643,11 +644,11 @@ class FacebookCheckerGUI:
                 )
 
         except Exception as e:
-            self.log_message(f"⚠️ UI Update Error: {e}")
+            self.log_message(f"\u26a0\ufe0f UI Update Error: {e}")
 
         # Continue updating if still running
         if self.is_running or not self.results_queue.empty():
-            self.root.after(100, self.update_ui)
+            self.root.after(100, lambda: self.update_ui())
 
     def on_text_change(self, event=None):
         """Handle text change event to update line numbers"""
@@ -655,7 +656,7 @@ class FacebookCheckerGUI:
 
     def on_paste_event(self, event=None):
         """Handle paste event to update line numbers after a short delay"""
-        self.root.after(10, self.update_line_numbers)
+        self.root.after(10, lambda: self.update_line_numbers())
 
     def on_headless_toggle(self):
         """Handle headless mode toggle"""

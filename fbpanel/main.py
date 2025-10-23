@@ -30,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Global configuration
-EXPIRATION_DATE = datetime(2025, 10, 22, 21, 59, 59)
+EXPIRATION_DATE = datetime(2025, 11, 23, 17, 59, 59)
 PROXY_SERVER = "http://127.0.0.1:8080"
 TIMEOUT = 30000  # milliseconds
 POLL_INTERVAL = 0.3  # seconds
