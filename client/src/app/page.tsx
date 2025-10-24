@@ -17,26 +17,26 @@ function Home() {
     const features = [
         {
             icon: HiLockClosed,
-            title: "Secure Generation",
-            description: "Generate OTP codes with advanced security features and encryption",
+            title: "Secure Checking",
+            description: "Check phone numbers with advanced security features and privacy protection",
             color: theme.palette.primary.main,
         },
         {
             icon: HiClock,
             title: "Track History",
-            description: "Keep track of all your generated OTP codes with detailed logs",
+            description: "Keep track of all your checked numbers with detailed logs and results",
             color: theme.palette.secondary.main,
         },
         {
             icon: HiChartBar,
             title: "Analytics",
-            description: "Monitor your OTP generation patterns and usage statistics",
+            description: "Monitor your checking patterns and view comprehensive statistics",
             color: theme.palette.success.main,
         },
         {
             icon: HiCog6Tooth,
             title: "Customizable",
-            description: "Configure the application to match your workflow preferences",
+            description: "Configure proxy settings, concurrency, and other preferences",
             color: theme.palette.warning.main,
         },
     ];
@@ -61,18 +61,18 @@ function Home() {
                         Professional OTP Solution
                     </Typography>
                     <Typography variant="h3" sx={{fontWeight: 700, mb: 2, letterSpacing: "-0.02em"}}>
-                        Welcome to FB OTP Generator
+                        Welcome to FB Phone Checker
                     </Typography>
                     <Typography variant="body1" sx={{color: "text.secondary", mb: 4, maxWidth: 600, lineHeight: 1.7}}>
-                        Securely generate and manage your Facebook OTP codes with a professional-grade desktop application. Designed for
-                        efficiency and security.
+                        Efficiently check if phone numbers are registered on Facebook with a professional-grade desktop application.
+                        Designed for efficiency and security.
                     </Typography>
                     <Box sx={{display: "flex", gap: 2}}>
                         <Button variant="contained" size="large" component={Link} href="/generate" sx={{px: 4}}>
-                            Start Generating
+                            Start Checking
                         </Button>
-                        <Button variant="outlined" size="large" component={Link} href="/history" sx={{px: 4}}>
-                            View History
+                        <Button variant="outlined" size="large" component={Link} href="/jobs" sx={{px: 4}}>
+                            View Jobs
                         </Button>
                     </Box>
                 </Box>

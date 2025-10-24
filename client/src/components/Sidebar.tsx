@@ -2,7 +2,7 @@
 import React from "react";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
-import {HiSquares2X2, HiLockClosed, HiClock, HiCog6Tooth} from "react-icons/hi2";
+import {HiSquares2X2, HiLockClosed, HiClock, HiCog6Tooth, HiBriefcase} from "react-icons/hi2";
 import Box from "@mui/material/Box";
 import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
@@ -21,9 +21,14 @@ export default function Sidebar() {
             icon: HiSquares2X2,
         },
         {
-            name: "Generate OTP",
+            name: "Phone Checker",
             path: "/generate",
             icon: HiLockClosed,
+        },
+        {
+            name: "Jobs",
+            path: "/jobs",
+            icon: HiBriefcase,
         },
         {
             name: "History",
@@ -69,7 +74,7 @@ export default function Sidebar() {
                     </Box>
                     <Box>
                         <Typography variant="body1" sx={{fontWeight: 600, lineHeight: 1.2}}>
-                            OTP Generator
+                            FB Checker
                         </Typography>
                         <Typography variant="caption" sx={{color: "text.secondary", fontSize: "0.75rem"}}>
                             Professional Edition
