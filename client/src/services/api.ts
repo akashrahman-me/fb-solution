@@ -7,7 +7,6 @@ import {
     HealthResponse,
     StatusResponse,
     ProxyConfig,
-    ProxyTestResponse,
     JobCreateRequest,
     JobCreateResponse,
     JobStatusResponse,
@@ -96,13 +95,6 @@ export async function setProxyConfig(config: ProxyConfig): Promise<ApiResponse<P
     });
 }
 
-/**
- * Test proxy connection
- */
-export async function testProxyConnection(): Promise<ApiResponse<ProxyTestResponse>> {
-    return fetchApi<ProxyTestResponse>(API_ENDPOINTS.PROXY_TEST);
-}
-
 // ============================================================================
 // Jobs API (Current Job Management Only)
 // ============================================================================
@@ -180,9 +172,10 @@ export function streamJobProgress(
         }
     };
 
-    eventSource.onerror = () => {
+    eventSource.onerror = (error) => {
+        console.warn("SSE connection error, will fallback to polling:", error);
         if (onError) {
-            onError(new Error("EventSource failed"));
+            onError(new Error("SSE connection failed - using polling fallback"));
         }
         eventSource.close();
     };

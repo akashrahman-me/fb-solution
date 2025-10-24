@@ -14,7 +14,6 @@ export const API_ENDPOINTS = {
 
     // Proxy
     PROXY_CONFIG: "/api/proxy/config",
-    PROXY_TEST: "/api/proxy/test",
 
     // Jobs (Current Job Management)
     JOBS: "/api/jobs", // POST - create job

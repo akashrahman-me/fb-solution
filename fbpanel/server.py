@@ -244,48 +244,6 @@ async def set_proxy_config(config: ProxyConfig):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.get("/api/proxy/test")
-async def test_proxy_connection():
-    if not proxy_injector.USE_PROXY:
-        return {
-            'success': True,
-            'message': 'Proxy is disabled - direct connection mode',
-            'proxy_enabled': False
-        }
-
-    if not proxy_injector.REMOTE_SERVER:
-        raise HTTPException(status_code=400, detail='Proxy is enabled but not configured')
-
-    try:
-        import socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(5)
-        result = sock.connect_ex((proxy_injector.REMOTE_SERVER, proxy_injector.REMOTE_PORT))
-        sock.close()
-
-        if result == 0:
-            return {
-                'success': True,
-                'message': f'Successfully connected to proxy {proxy_injector.REMOTE_SERVER}:{proxy_injector.REMOTE_PORT}',
-                'proxy_enabled': True,
-                'reachable': True
-            }
-        else:
-            return {
-                'success': False,
-                'message': f'Cannot connect to proxy {proxy_injector.REMOTE_SERVER}:{proxy_injector.REMOTE_PORT}',
-                'proxy_enabled': True,
-                'reachable': False
-            }
-    except Exception as e:
-        return {
-            'success': False,
-            'message': f'Proxy test failed: {str(e)}',
-            'proxy_enabled': True,
-            'reachable': False
-        }
-
-
 @app.get("/api/jobs")
 async def list_jobs():
     with jobs_lock:

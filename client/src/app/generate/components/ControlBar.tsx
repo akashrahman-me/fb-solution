@@ -91,7 +91,7 @@ export default function ControlBar({
                             variant="body2"
                             sx={{color: "text.secondary", fontSize: "0.8125rem", fontWeight: 500, whiteSpace: "nowrap"}}
                         >
-                            Headless
+                            &nbsp;&nbsp;Headless
                         </Typography>
                     }
                     sx={{margin: 0, mr: 1}}

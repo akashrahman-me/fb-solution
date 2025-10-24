@@ -151,7 +151,8 @@ export function useJobManager() {
                     }
                 },
                 (error) => {
-                    console.error("Stream error:", error);
+                    console.warn("SSE stream error, falling back to polling:", error);
+                    toast.info("Using polling mode for progress updates");
                     handleFallbackPolling(jobId, phones.length);
                 },
                 () => {

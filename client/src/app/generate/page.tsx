@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, {useState} from "react";
 import {toast} from "react-toastify";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -11,7 +11,7 @@ import {parsePhoneNumbers, countValidPhones} from "./utils/phoneUtils";
 import {useLocalStorage} from "@/hooks/useLocalStorage";
 
 export default function GeneratePage() {
-    const [phoneNumbers, setPhoneNumbers] = useLocalStorage("fb-checker-phone-numbers", "");
+    const [phoneNumbers, setPhoneNumbers] = useState("");
     const [concurrency, setConcurrency] = useLocalStorage("fb-checker-concurrency", 5);
     const [headless, setHeadless] = useLocalStorage("fb-checker-headless", true);
 

@@ -28,13 +28,6 @@ export interface ProxyConfig {
     password?: string;
 }
 
-export interface ProxyTestResponse {
-    success: boolean;
-    message: string;
-    ip?: string;
-    location?: string;
-}
-
 // ============================================================================
 // Job Types
 // ============================================================================
