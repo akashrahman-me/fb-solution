@@ -293,11 +293,13 @@ export default function SettingsPage() {
                                         </Typography>
                                         <TextField
                                             fullWidth
+                                            multiline
+                                            rows={6}
                                             value={licenseKey}
                                             onChange={(e) => setLicenseKey(e.target.value)}
                                             placeholder="Enter your license key"
                                             size="small"
-                                            sx={{maxWidth: 500}}
+                                            sx={{maxWidth: 600}}
                                         />
                                     </Box>
 
@@ -314,36 +316,58 @@ export default function SettingsPage() {
 
                                     {licenseData && (
                                         <>
-                                            <Divider sx={{opacity: 0.5}} />
+                                            <Divider sx={{opacity: 0.5, mt: 1}} />
                                             <Box
                                                 sx={{
                                                     display: "flex",
                                                     flexDirection: "column",
                                                     gap: 2,
-                                                    p: 2,
-                                                    bgcolor: "success.main",
-                                                    borderRadius: 1,
-                                                    opacity: 0.1,
+                                                    p: 3,
+                                                    bgcolor: (theme) => (theme.palette.mode === "dark" ? "success.dark" : "success.light"),
+                                                    borderRadius: 2,
+                                                    border: (theme) => `2px solid ${theme.palette.success.main}`,
+                                                    boxShadow: (theme) =>
+                                                        theme.palette.mode === "dark"
+                                                            ? "0 4px 12px rgba(46, 125, 50, 0.3)"
+                                                            : "0 4px 12px rgba(46, 125, 50, 0.2)",
                                                 }}
                                             >
-                                                <Typography variant="body2" sx={{color: "success.contrastText", fontWeight: 600}}>
-                                                    ✓ License Valid
-                                                </Typography>
-                                                <Box sx={{display: "flex", justifyContent: "space-between"}}>
-                                                    <Typography variant="body2" sx={{color: "success.contrastText"}}>
-                                                        Licensed to:
-                                                    </Typography>
-                                                    <Typography variant="body2" sx={{color: "success.contrastText", fontWeight: 600}}>
-                                                        {licenseData.name}
+                                                <Box sx={{display: "flex", alignItems: "center", gap: 1.5}}>
+                                                    <Box
+                                                        sx={{
+                                                            width: 32,
+                                                            height: 32,
+                                                            borderRadius: "50%",
+                                                            bgcolor: "success.main",
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            justifyContent: "center",
+                                                            color: "success.contrastText",
+                                                        }}
+                                                    >
+                                                        ✓
+                                                    </Box>
+                                                    <Typography variant="body1" sx={{fontWeight: 700, color: "success.main"}}>
+                                                        License Active
                                                     </Typography>
                                                 </Box>
-                                                <Box sx={{display: "flex", justifyContent: "space-between"}}>
-                                                    <Typography variant="body2" sx={{color: "success.contrastText"}}>
-                                                        Expires:
-                                                    </Typography>
-                                                    <Typography variant="body2" sx={{color: "success.contrastText", fontWeight: 600}}>
-                                                        {licenseData.expiry}
-                                                    </Typography>
+                                                <Box sx={{display: "flex", flexDirection: "column", gap: 1.5, ml: 0.5}}>
+                                                    <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
+                                                        <Typography variant="body2" sx={{color: "text.secondary", minWidth: 100}}>
+                                                            Licensed to:
+                                                        </Typography>
+                                                        <Typography variant="body2" sx={{fontWeight: 600, color: "text.primary"}}>
+                                                            {licenseData.name}
+                                                        </Typography>
+                                                    </Box>
+                                                    <Box sx={{display: "flex", alignItems: "center", gap: 2}}>
+                                                        <Typography variant="body2" sx={{color: "text.secondary", minWidth: 100}}>
+                                                            Expires on:
+                                                        </Typography>
+                                                        <Typography variant="body2" sx={{fontWeight: 600, color: "text.primary"}}>
+                                                            {licenseData.expiry}
+                                                        </Typography>
+                                                    </Box>
                                                 </Box>
                                             </Box>
                                         </>

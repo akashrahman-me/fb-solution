@@ -13,7 +13,7 @@ import asyncio
 import threading
 import uuid
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from queue import Queue
 import logging
 
@@ -248,7 +248,7 @@ def verify_token(token):
         return False, "invalid token #3984"
     # expiry check
     try:
-        if datetime.datetime.now(datetime.timezone.utc) > datetime.datetime.strptime(data["expiry"], "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc):
+        if datetime.now(timezone.utc) > datetime.strptime(data["expiry"], "%Y-%m-%d").replace(tzinfo=timezone.utc):
             return False, "invalid token #2934"
     except Exception:
         return False, "invalid token #3984"
@@ -263,9 +263,10 @@ def verify_token(token):
 
 def validate_license_key(license_key: str) -> Dict[str, Any]:
     ok, info = verify_token(license_key)
+    print(ok, info)
     if ok:
         return {
-            'success': ok,
+            'success': True,
             'data': info
         }
     else:
@@ -277,10 +278,6 @@ def validate_license_key(license_key: str) -> Dict[str, Any]:
 
 @app.post("/api/license/validate")
 async def validate_license(request: LicenseValidateRequest):
-    """
-    Validate license key.
-    Currently uses dummy validation - will be implemented later.
-    """
     try:
         result = validate_license_key(request.license_key)
         return result
