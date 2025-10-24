@@ -10,6 +10,7 @@ from main import (
     start_proxy_server,
     EXPIRATION_DATE
 )
+import proxy_injector
 
 # Set appearance mode and color theme
 ctk.set_appearance_mode("dark")
@@ -228,6 +229,20 @@ class FacebookCheckerGUI:
         # Right side - Expiration info
         info_section = ctk.CTkFrame(header_content, fg_color="transparent")
         info_section.pack(side="right", fill="y")
+
+        # Settings button
+        settings_button = ModernButton(
+            info_section,
+            text="⚙️ Proxy Settings",
+            command=self.open_proxy_settings,
+            fg_color=("#e2e8f0", "#334155"),
+            hover_color=("#cbd5e1", "#475569"),
+            text_color=("#1e293b", "#e2e8f0"),
+            width=140,
+            height=32,
+            font=ctk.CTkFont(size=12, weight="bold")
+        )
+        settings_button.pack(anchor="e", pady=(0, 5))
 
         expiration_badge = ctk.CTkFrame(
             info_section,
@@ -710,6 +725,10 @@ class FacebookCheckerGUI:
             self.line_numbers.yview_moveto(yview[0])
         except Exception:
             pass  # Ignore errors during initialization
+
+    def open_proxy_settings(self):
+        """Open the proxy settings dialog"""
+        proxy_injector.open_proxy_settings_dialog()
 
     def run(self):
         """Start the GUI application"""

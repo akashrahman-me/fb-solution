@@ -21,22 +21,49 @@ STATS_SERVER_PORT = 8081
 # Bandwidth limit: abort requests if response exceeds this size
 MAX_RESPONSE_SIZE = 128 * 1024 * 1024
 
-# Residential Proxy Credentials
+# Datacenter Proxy Credentials - Now configurable at runtime
 # ---------------------
-REMOTE_SERVER = "p.webshare.io"
-REMOTE_PORT = 80
-REMOTE_USERNAME = "rtoamiym-rotate"
-REMOTE_PASSWORD = "l2otu1msw0uq"
+REMOTE_SERVER = None
+REMOTE_PORT = None
+REMOTE_USERNAME = None
+REMOTE_PASSWORD = None
+PROXY_AUTH = None
+USE_PROXY = False
 
-# Datacenter Proxy Credentials
-# ---------------------
-# REMOTE_SERVER = "31.59.20.176"
-# REMOTE_PORT = 6754
-# REMOTE_USERNAME = "rtoamiym"
-# REMOTE_PASSWORD = "l2otu1msw0uq"
+def configure_proxy(server=None, port=None, username=None, password=None, enabled=True):
+    """
+    Configure proxy settings at runtime
 
-# Base64 encode the credentials
-PROXY_AUTH = base64.b64encode(f"{REMOTE_USERNAME}:{REMOTE_PASSWORD}".encode()).decode()
+    Args:
+        server: Proxy server address (e.g., "31.59.20.176")
+        port: Proxy server port (e.g., 6754)
+        username: Proxy username
+        password: Proxy password
+        enabled: Whether to use proxy or connect directly
+    """
+    global REMOTE_SERVER, REMOTE_PORT, REMOTE_USERNAME, REMOTE_PASSWORD, PROXY_AUTH, USE_PROXY
+
+    USE_PROXY = enabled
+
+    if enabled and server and port:
+        REMOTE_SERVER = server
+        REMOTE_PORT = int(port)
+        REMOTE_USERNAME = username
+        REMOTE_PASSWORD = password
+
+        if username and password:
+            PROXY_AUTH = base64.b64encode(f"{username}:{password}".encode()).decode()
+        else:
+            PROXY_AUTH = None
+
+        print(f"✓ Proxy configured: {REMOTE_SERVER}:{REMOTE_PORT} (Auth: {'Yes' if PROXY_AUTH else 'No'})")
+    else:
+        REMOTE_SERVER = None
+        REMOTE_PORT = None
+        REMOTE_USERNAME = None
+        REMOTE_PASSWORD = None
+        PROXY_AUTH = None
+        print("✓ Direct connection mode (no proxy)")
 
 # Global statistics
 class ProxyStats:
@@ -370,7 +397,7 @@ class ProxyThread(threading.Thread):
             # Add Proxy-Authorization header if not present
             lines = request_str.split('\r\n')
             has_proxy_auth = any('Proxy-Authorization' in line for line in lines)
-            
+
             if not has_proxy_auth:
                 # Insert Proxy-Authorization after the first line
                 lines.insert(1, f'Proxy-Authorization: Basic {PROXY_AUTH}')
@@ -383,7 +410,7 @@ class ProxyThread(threading.Thread):
             
             try:
                 upstream.connect((REMOTE_SERVER, REMOTE_PORT))
-                
+
                 # Send the modified request to upstream proxy
                 upstream.sendall(request)
                 
@@ -498,8 +525,22 @@ class ProxyThread(threading.Thread):
             pass
 
 
-def start_proxy_server():
-    """Start the local proxy server"""
+def start_proxy_server(proxy_port=None, stats_port=None):
+    """
+    Start the local proxy server
+
+    Args:
+        proxy_port: Port for proxy server (default: 8080)
+        stats_port: Port for stats server (default: 8081)
+    """
+    global LOCAL_PROXY_PORT, STATS_SERVER_PORT
+
+    # Use custom ports if provided
+    if proxy_port is not None:
+        LOCAL_PROXY_PORT = proxy_port
+    if stats_port is not None:
+        STATS_SERVER_PORT = stats_port
+
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
@@ -508,7 +549,10 @@ def start_proxy_server():
         server.listen(100)
 
         print(f"✓ Proxy server started on {LOCAL_PROXY_HOST}:{LOCAL_PROXY_PORT}")
-        print(f"✓ Forwarding to: {REMOTE_SERVER}:{REMOTE_PORT}")
+        if USE_PROXY and REMOTE_SERVER:
+            print(f"✓ Forwarding to: {REMOTE_SERVER}:{REMOTE_PORT}")
+        else:
+            print(f"✓ Direct connection mode (no upstream proxy)")
 
         # Start stats server in a separate thread
         stats_thread = threading.Thread(target=start_stats_server, daemon=True)
@@ -530,6 +574,263 @@ def start_proxy_server():
         print("Proxy server stopped.")
 
 
+def open_proxy_settings_dialog():
+    """Open a settings dialog to configure proxy settings"""
+    try:
+        import customtkinter as ctk
+    except ImportError:
+        print("CustomTkinter not available, cannot open settings dialog")
+        return
+
+    # Create dialog window
+    dialog = ctk.CTkToplevel()
+    dialog.title("Proxy Settings")
+    dialog.geometry("600x520")
+    dialog.resizable(False, False)
+
+    # Make dialog modal
+    dialog.grab_set()
+    dialog.focus_set()
+
+    # Center the dialog
+    dialog.update_idletasks()
+    x = (dialog.winfo_screenwidth() // 2) - (600 // 2)
+    y = (dialog.winfo_screenheight() // 2) - (520 // 2)
+    dialog.geometry(f"600x520+{x}+{y}")
+
+    # Main container
+    main_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+    main_frame.pack(fill="both", expand=True, padx=30, pady=30)
+
+    # Title
+    title_label = ctk.CTkLabel(
+        main_frame,
+        text="🌐 Proxy Configuration",
+        font=ctk.CTkFont(size=24, weight="bold")
+    )
+    title_label.pack(pady=(0, 10))
+
+    subtitle_label = ctk.CTkLabel(
+        main_frame,
+        text="Configure your proxy server settings",
+        font=ctk.CTkFont(size=12),
+        text_color="gray"
+    )
+    subtitle_label.pack(pady=(0, 25))
+
+    # Enable/Disable Proxy
+    proxy_enabled_var = ctk.BooleanVar(value=USE_PROXY)
+
+    enable_frame = ctk.CTkFrame(main_frame, fg_color=("#e2e8f0", "#1e293b"), corner_radius=10)
+    enable_frame.pack(fill="x", pady=(0, 20))
+
+    enable_inner = ctk.CTkFrame(enable_frame, fg_color="transparent")
+    enable_inner.pack(fill="x", padx=20, pady=15)
+
+    enable_label = ctk.CTkLabel(
+        enable_inner,
+        text="Enable Proxy",
+        font=ctk.CTkFont(size=14, weight="bold")
+    )
+    enable_label.pack(side="left")
+
+    enable_switch = ctk.CTkSwitch(
+        enable_inner,
+        text="",
+        variable=proxy_enabled_var,
+        width=50
+    )
+    enable_switch.pack(side="right")
+
+    # Proxy Settings Form
+    form_frame = ctk.CTkFrame(main_frame, fg_color=("#f8fafc", "#0f172a"), corner_radius=10)
+    form_frame.pack(fill="both", expand=True, pady=(0, 20))
+
+    form_inner = ctk.CTkFrame(form_frame, fg_color="transparent")
+    form_inner.pack(fill="both", expand=True, padx=25, pady=25)
+
+    # Server Address
+    server_label = ctk.CTkLabel(
+        form_inner,
+        text="Proxy Server Address:",
+        font=ctk.CTkFont(size=13, weight="bold"),
+        anchor="w"
+    )
+    server_label.pack(fill="x", pady=(0, 5))
+
+    server_entry = ctk.CTkEntry(
+        form_inner,
+        placeholder_text="e.g., 31.59.20.176",
+        height=40,
+        font=ctk.CTkFont(size=13)
+    )
+    server_entry.pack(fill="x", pady=(0, 15))
+    if REMOTE_SERVER:
+        server_entry.insert(0, REMOTE_SERVER)
+
+    # Port
+    port_label = ctk.CTkLabel(
+        form_inner,
+        text="Proxy Port:",
+        font=ctk.CTkFont(size=13, weight="bold"),
+        anchor="w"
+    )
+    port_label.pack(fill="x", pady=(0, 5))
+
+    port_entry = ctk.CTkEntry(
+        form_inner,
+        placeholder_text="e.g., 6754",
+        height=40,
+        font=ctk.CTkFont(size=13)
+    )
+    port_entry.pack(fill="x", pady=(0, 15))
+    if REMOTE_PORT:
+        port_entry.insert(0, str(REMOTE_PORT))
+
+    # Username
+    username_label = ctk.CTkLabel(
+        form_inner,
+        text="Username (Optional):",
+        font=ctk.CTkFont(size=13, weight="bold"),
+        anchor="w"
+    )
+    username_label.pack(fill="x", pady=(0, 5))
+
+    username_entry = ctk.CTkEntry(
+        form_inner,
+        placeholder_text="Proxy username",
+        height=40,
+        font=ctk.CTkFont(size=13)
+    )
+    username_entry.pack(fill="x", pady=(0, 15))
+    if REMOTE_USERNAME:
+        username_entry.insert(0, REMOTE_USERNAME)
+
+    # Password
+    password_label = ctk.CTkLabel(
+        form_inner,
+        text="Password (Optional):",
+        font=ctk.CTkFont(size=13, weight="bold"),
+        anchor="w"
+    )
+    password_label.pack(fill="x", pady=(0, 5))
+
+    password_entry = ctk.CTkEntry(
+        form_inner,
+        placeholder_text="Proxy password",
+        height=40,
+        font=ctk.CTkFont(size=13),
+        show="•"
+    )
+    password_entry.pack(fill="x", pady=(0, 5))
+    if REMOTE_PASSWORD:
+        password_entry.insert(0, REMOTE_PASSWORD)
+
+    # Info label
+    info_label = ctk.CTkLabel(
+        main_frame,
+        text="💡 Leave username/password empty if proxy doesn't require authentication.\n"
+             "Disable proxy to connect directly without a proxy server.",
+        font=ctk.CTkFont(size=11),
+        text_color="gray",
+        justify="left"
+    )
+    info_label.pack(pady=(0, 20))
+
+    # Buttons
+    button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+    button_frame.pack(fill="x")
+
+    def save_settings():
+        """Save proxy settings"""
+        enabled = proxy_enabled_var.get()
+        server = server_entry.get().strip()
+        port = port_entry.get().strip()
+        username = username_entry.get().strip()
+        password = password_entry.get().strip()
+
+        if enabled and (not server or not port):
+            # Show error
+            error_label = ctk.CTkLabel(
+                main_frame,
+                text="❌ Server address and port are required when proxy is enabled!",
+                text_color="#ef4444",
+                font=ctk.CTkFont(size=12, weight="bold")
+            )
+            error_label.pack(before=button_frame, pady=(0, 10))
+            dialog.after(3000, error_label.destroy)
+            return
+
+        # Validate port
+        if enabled and port:
+            try:
+                port_num = int(port)
+                if port_num < 1 or port_num > 65535:
+                    raise ValueError()
+            except ValueError:
+                error_label = ctk.CTkLabel(
+                    main_frame,
+                    text="❌ Port must be a number between 1 and 65535!",
+                    text_color="#ef4444",
+                    font=ctk.CTkFont(size=12, weight="bold")
+                )
+                error_label.pack(before=button_frame, pady=(0, 10))
+                dialog.after(3000, error_label.destroy)
+                return
+
+        # Configure proxy
+        configure_proxy(
+            server=server if server else None,
+            port=int(port) if port else None,
+            username=username if username else None,
+            password=password if password else None,
+            enabled=enabled
+        )
+
+        # Show success message
+        success_label = ctk.CTkLabel(
+            main_frame,
+            text="✅ Proxy settings saved successfully!",
+            text_color="#10b981",
+            font=ctk.CTkFont(size=12, weight="bold")
+        )
+        success_label.pack(before=button_frame, pady=(0, 10))
+
+        # Close dialog after a short delay
+        dialog.after(1000, dialog.destroy)
+
+    def cancel_settings():
+        """Cancel and close dialog"""
+        dialog.destroy()
+
+    cancel_button = ctk.CTkButton(
+        button_frame,
+        text="Cancel",
+        command=cancel_settings,
+        fg_color="transparent",
+        border_width=2,
+        border_color=("#cbd5e1", "#475569"),
+        text_color=("#475569", "#cbd5e1"),
+        hover_color=("#f1f5f9", "#334155"),
+        height=40,
+        font=ctk.CTkFont(size=13, weight="bold")
+    )
+    cancel_button.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+    save_button = ctk.CTkButton(
+        button_frame,
+        text="💾 Save Settings",
+        command=save_settings,
+        fg_color="#3b82f6",
+        hover_color="#2563eb",
+        height=40,
+        font=ctk.CTkFont(size=13, weight="bold")
+    )
+    save_button.pack(side="right", fill="x", expand=True)
+
+    # Wait for dialog to close
+    dialog.wait_window()
+
+
 if __name__ == "__main__":
     start_proxy_server()
-

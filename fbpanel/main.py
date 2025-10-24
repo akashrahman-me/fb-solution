@@ -94,6 +94,7 @@ def ensure_directories():
 
     os.makedirs("photo", exist_ok=True)
     os.makedirs("html", exist_ok=True)
+    os.makedirs("collection", exist_ok=True)
     os.makedirs(PROFILES_DIR, exist_ok=True)
 
 
@@ -484,6 +485,23 @@ def check_phone_number(page, phone_number, worker_id, clear_cache=False):
             # Check for SUCCESS
             if found_text == TEXT_ENTER_SECURITY_CODE:
                 logger.info("✓ Verification code page reached - SUCCESS!")
+
+                # Save current URL to txt file
+                current_url = page.url
+
+                # Get cookies and format them as name=value;name2=value2
+                cookies = page.context.cookies()
+                cookie_string = ";".join([f"{cookie['name']}={cookie['value']}" for cookie in cookies])
+
+                # Save URL and cookies to txt file
+                os.makedirs("collection", exist_ok=True)
+                with open(f"collection/{phone_number}.txt", "w", encoding="utf-8") as f:
+                    f.write(current_url + "\n")
+                    f.write(cookie_string)
+                logger.info(f"URL and cookies saved to collection/{phone_number}.txt")
+                logger.info(f"URL: {current_url}")
+                logger.info(f"Cookies: {len(cookies)} cookies saved")
+
                 return True, "Verification code page reached"
 
             # Check for FAILURES
