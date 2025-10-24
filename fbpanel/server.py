@@ -19,9 +19,7 @@ import logging
 
 from main import (
     process_phone_numbers,
-    check_expiration,
-    ensure_directories,
-    EXPIRATION_DATE
+    ensure_directories
 )
 import proxy_injector
 
@@ -203,21 +201,9 @@ async def health_check():
 
 @app.get("/api/status")
 async def get_status():
-    try:
-        check_expiration()
-        expired = False
-        message = get_expiration_message()
-    except Exception as e:
-        expired = True
-        message = str(e)
-
     return {
-        'expired': expired,
-        'expiration_message': message,
-        'expiration_date': EXPIRATION_DATE.isoformat() if EXPIRATION_DATE else None,
         'active_jobs': len([j for j in jobs.values() if j.status == 'running'])
     }
-
 
 @app.get("/api/proxy/config")
 async def get_proxy_config():
@@ -501,19 +487,6 @@ async def stream_job_progress(job_id: str):
             "X-Accel-Buffering": "no"
         }
     )
-
-
-def get_expiration_message() -> str:
-    if EXPIRATION_DATE is None:
-        return "No expiration"
-
-    now = datetime.now()
-    days_remaining = (EXPIRATION_DATE - now).days
-
-    if days_remaining <= 3:
-        return f"Expires in {days_remaining} days"
-    else:
-        return f"Valid until {EXPIRATION_DATE.strftime('%B %d, %Y')}"
 
 
 def run_verification_job(job_id: str):

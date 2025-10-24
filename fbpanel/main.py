@@ -30,7 +30,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Global configuration
-EXPIRATION_DATE = datetime(2025, 11, 23, 17, 59, 59)
 PROXY_SERVER = "http://127.0.0.1:9080"
 TIMEOUT = 30000  # milliseconds
 POLL_INTERVAL = 0.3  # seconds
@@ -49,10 +48,6 @@ BROWSER_ARGS = [
     '--disk-cache-size=104857600',  # 100MB cache
     '--media-cache-size=104857600',  # 100MB media cache
 ]
-
-# Thread-safe expiration warning
-_expiration_warning_shown = False
-_warning_lock = threading.Lock()
 
 # Proxy server state
 _proxy_thread = None
@@ -96,29 +91,6 @@ def ensure_directories():
     os.makedirs("html", exist_ok=True)
     os.makedirs("collection", exist_ok=True)
     os.makedirs(PROFILES_DIR, exist_ok=True)
-
-
-def check_expiration():
-    """Check if software has expired"""
-    global _expiration_warning_shown
-
-    if EXPIRATION_DATE is None:
-        return
-
-    now = datetime.now()
-
-    # Check if expired
-    if now > EXPIRATION_DATE:
-        days_expired = (now - EXPIRATION_DATE).days
-        raise Exception(f"SOFTWARE EXPIRED: This software expired on {EXPIRATION_DATE.strftime('%B %d, %Y')} ({days_expired} days ago)")
-
-    # Show warning if expiring soon
-    days_remaining = (EXPIRATION_DATE - now).days
-    if days_remaining <= 3 and not _expiration_warning_shown:
-        with _warning_lock:
-            if not _expiration_warning_shown:
-                logger.warning(f"Software will expire in {days_remaining} days!")
-                _expiration_warning_shown = True
 
 
 def get_profile_path(worker_id):
@@ -182,8 +154,6 @@ def random_viewport():
 
 def create_browser(worker_id, headless=False):
     """Create and return a browser context and page"""
-    check_expiration()
-
     profile_path = get_profile_path(worker_id)
     profile_exists = os.path.exists(os.path.join(profile_path, "Default"))
 
@@ -659,7 +629,6 @@ def process_phone_numbers(phone_numbers, num_workers=1, headless=False, callback
     start_proxy_server()
 
     ensure_directories()
-    check_expiration()
 
     # Create queue and add phone numbers
     phone_queue = queue.Queue()
@@ -732,101 +701,6 @@ def main():
 998992607726
 998992604633
 998992606010
-998992607620
-998992606191
-998992604759
-998992600926
-998992606195
-998992605762
-998992609282
-998992608874
-998992607830
-998992608977
-998992609553
-998992609445
-998992605681
-998992601383
-998992607468
-998992602444
-998992600586
-998992600986
-998992607825
-998992604723
-998992606209
-998992606221
-998992604145
-998992604858
-998992607610
-998992608136
-998992605528
-998992603894
-998992600045
-998992605705
-998992605722
-998992607533
-998992606834
-998992609210
-998992609905
-998992604815
-998992604581
-998992605322
-998992604928
-998992605962
-998992602198
-998992603252
-998992602422
-998992607311
-998992602176
-998992604447
-998992601384
-998992602509
-998992607125
-998992601925
-998992600221
-998992609330
-998992604451
-998992604850
-998992609941
-998992605819
-998992602378
-998992603977
-998992602512
-998992601259
-998992604506
-998992602134
-998992604309
-998992601508
-998992609141
-998992608051
-998992601238
-998992602229
-998992605629
-998992602914
-998992604548
-998992602643
-998992605649
-998992600970
-998992608924
-998992603577
-998992606775
-998992604016
-998992607034
-998992603236
-998992606638
-998992608976
-998992605843
-998992606962
-998992609739
-998992606302
-998992602593
-998992604478
-998992602481
-998992608982
-998992608839
-998992609637
-998992605031
-998992609731
-998992601937
     """
 
     # Parse phone numbers (remove empty lines and spaces)

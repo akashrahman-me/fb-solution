@@ -13,9 +13,6 @@ export interface HealthResponse {
 }
 
 export interface StatusResponse {
-    expired: boolean;
-    expiration_message: string;
-    expiration_date: string;
     active_jobs: number;
 }
 
