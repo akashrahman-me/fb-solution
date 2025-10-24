@@ -15,6 +15,7 @@ import {
     JobStreamEvent,
     ApiError,
     ApiResponse,
+    LicenseValidateResponse,
 } from "@/types/api";
 import {API_ENDPOINTS, getApiUrl} from "@/config/api";
 
@@ -92,6 +93,20 @@ export async function setProxyConfig(config: ProxyConfig): Promise<ApiResponse<P
     return fetchApi<ProxyConfig>(API_ENDPOINTS.PROXY_CONFIG, {
         method: "POST",
         body: JSON.stringify(config),
+    });
+}
+
+// ============================================================================
+// License API
+// ============================================================================
+
+/**
+ * Validate license key
+ */
+export async function validateLicense(licenseKey: string): Promise<ApiResponse<LicenseValidateResponse>> {
+    return fetchApi<LicenseValidateResponse>(API_ENDPOINTS.LICENSE_VALIDATE, {
+        method: "POST",
+        body: JSON.stringify({license_key: licenseKey}),
     });
 }
 

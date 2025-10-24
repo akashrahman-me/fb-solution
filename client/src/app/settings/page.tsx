@@ -11,9 +11,12 @@ import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
 import Divider from "@mui/material/Divider";
+import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import {toast} from "react-toastify";
 import {useTheme} from "@/context/ThemeContext";
-import {ProxyConfig} from "@/types/api";
+import {ProxyConfig, LicenseData} from "@/types/api";
+import {validateLicense} from "@/services/api";
 
 export default function SettingsPage() {
     const {themeMode, setThemeMode} = useTheme();
@@ -30,9 +33,15 @@ export default function SettingsPage() {
         password: "",
     });
 
+    // License settings
+    const [licenseKey, setLicenseKey] = useState("");
+    const [licenseData, setLicenseData] = useState<LicenseData | null>(null);
+    const [licenseValidating, setLicenseValidating] = useState(false);
+
     // Load proxy configuration from localStorage only
     useEffect(() => {
         loadProxyConfig();
+        loadLicenseConfig();
     }, []);
 
     const loadProxyConfig = () => {
@@ -53,6 +62,50 @@ export default function SettingsPage() {
         } finally {
             // Mark proxy config as loaded to enable auto-save
             setProxyConfigLoaded(true);
+        }
+    };
+
+    const loadLicenseConfig = () => {
+        try {
+            const storedKey = localStorage.getItem("fb-checker-license-key");
+            const storedData = localStorage.getItem("fb-checker-license-data");
+
+            if (storedKey) {
+                setLicenseKey(storedKey);
+            }
+            if (storedData) {
+                setLicenseData(JSON.parse(storedData));
+            }
+        } catch (error) {
+            console.error("Error loading license config:", error);
+        }
+    };
+
+    const handleValidateLicense = async () => {
+        if (!licenseKey.trim()) {
+            toast.error("Please enter a license key");
+            return;
+        }
+
+        setLicenseValidating(true);
+        try {
+            const response = await validateLicense(licenseKey);
+
+            if (response.success && response.data?.data) {
+                setLicenseData(response.data.data);
+                localStorage.setItem("fb-checker-license-key", licenseKey);
+                localStorage.setItem("fb-checker-license-data", JSON.stringify(response.data.data));
+                toast.success("License validated successfully!");
+            } else {
+                setLicenseData(null);
+                localStorage.removeItem("fb-checker-license-data");
+                toast.error(response.data?.message || response.error || "Invalid license key");
+            }
+        } catch (error) {
+            console.error("Error validating license:", error);
+            toast.error("Failed to validate license");
+        } finally {
+            setLicenseValidating(false);
         }
     };
 
@@ -219,6 +272,79 @@ export default function SettingsPage() {
                                                     size="small"
                                                     sx={{maxWidth: 400}}
                                                 />
+                                            </Box>
+                                        </>
+                                    )}
+                                </Box>
+                            </CardContent>
+                        </Card>
+
+                        {/* License */}
+                        <Card>
+                            <CardContent sx={{p: 4}}>
+                                <Typography variant="h6" sx={{fontWeight: 600, mb: 3, fontSize: "1rem"}}>
+                                    License
+                                </Typography>
+
+                                <Box sx={{display: "flex", flexDirection: "column", gap: 2.5}}>
+                                    <Box>
+                                        <Typography variant="body2" sx={{fontWeight: 600, mb: 1.5, fontSize: "0.8125rem"}}>
+                                            License Key
+                                        </Typography>
+                                        <TextField
+                                            fullWidth
+                                            value={licenseKey}
+                                            onChange={(e) => setLicenseKey(e.target.value)}
+                                            placeholder="Enter your license key"
+                                            size="small"
+                                            sx={{maxWidth: 500}}
+                                        />
+                                    </Box>
+
+                                    <Box sx={{display: "flex", gap: 2, alignItems: "center"}}>
+                                        <Button
+                                            variant="contained"
+                                            onClick={handleValidateLicense}
+                                            disabled={licenseValidating || !licenseKey.trim()}
+                                            startIcon={licenseValidating && <CircularProgress size={16} />}
+                                        >
+                                            {licenseValidating ? "Validating..." : "Validate License"}
+                                        </Button>
+                                    </Box>
+
+                                    {licenseData && (
+                                        <>
+                                            <Divider sx={{opacity: 0.5}} />
+                                            <Box
+                                                sx={{
+                                                    display: "flex",
+                                                    flexDirection: "column",
+                                                    gap: 2,
+                                                    p: 2,
+                                                    bgcolor: "success.main",
+                                                    borderRadius: 1,
+                                                    opacity: 0.1,
+                                                }}
+                                            >
+                                                <Typography variant="body2" sx={{color: "success.contrastText", fontWeight: 600}}>
+                                                    ✓ License Valid
+                                                </Typography>
+                                                <Box sx={{display: "flex", justifyContent: "space-between"}}>
+                                                    <Typography variant="body2" sx={{color: "success.contrastText"}}>
+                                                        Licensed to:
+                                                    </Typography>
+                                                    <Typography variant="body2" sx={{color: "success.contrastText", fontWeight: 600}}>
+                                                        {licenseData.name}
+                                                    </Typography>
+                                                </Box>
+                                                <Box sx={{display: "flex", justifyContent: "space-between"}}>
+                                                    <Typography variant="body2" sx={{color: "success.contrastText"}}>
+                                                        Expires:
+                                                    </Typography>
+                                                    <Typography variant="body2" sx={{color: "success.contrastText", fontWeight: 600}}>
+                                                        {licenseData.expiry}
+                                                    </Typography>
+                                                </Box>
                                             </Box>
                                         </>
                                     )}

@@ -29,6 +29,25 @@ export interface ProxyConfig {
 }
 
 // ============================================================================
+// License Types
+// ============================================================================
+
+export interface LicenseValidateRequest {
+    license_key: string;
+}
+
+export interface LicenseData {
+    name: string;
+    expiry: string;
+}
+
+export interface LicenseValidateResponse {
+    success: boolean;
+    message?: string;
+    data?: LicenseData;
+}
+
+// ============================================================================
 // Job Types
 // ============================================================================
 
@@ -39,6 +58,7 @@ export interface JobCreateRequest {
     workers: number;
     headless: boolean;
     proxy?: ProxyConfig;
+    license_key?: string;
 }
 
 export interface JobCreateResponse {

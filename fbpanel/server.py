@@ -17,6 +17,11 @@ from datetime import datetime
 from queue import Queue
 import logging
 
+import os, base64, tkinter as tk, tkinter.messagebox as mb
+from cryptography.fernet import Fernet
+import sys
+import uuid as _uuid
+
 from main import (
     process_phone_numbers,
     ensure_directories
@@ -100,11 +105,16 @@ class ProxyConfig(BaseModel):
         return v
 
 
+class LicenseValidateRequest(BaseModel):
+    license_key: str = Field(..., min_length=1, description="License key to validate")
+
+
 class CreateJobRequest(BaseModel):
     phone_numbers: List[str] = Field(..., min_length=1, description="List of phone numbers to verify")
     workers: int = Field(default=5, ge=1, le=100, description="Number of concurrent workers")
     headless: bool = Field(default=False, description="Run browsers in headless mode")
     proxy: Optional[ProxyConfig] = Field(default=None, description="Proxy configuration for this job")
+    license_key: Optional[str] = Field(default=None, description="License key for validation")
 
     @field_validator('phone_numbers')
     @classmethod
@@ -206,6 +216,81 @@ async def get_status():
         'active_jobs': len([j for j in jobs.values() if j.status == 'running'])
     }
 
+f = Fernet("1WvpfsEvFd4ffCFsyQy-y8zoNA_nTHkrd4sd8qvQWMw=")
+
+def get_system_uuid():
+    # Try Windows MachineGuid
+    try:
+        if sys.platform.startswith("win"):
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                 r"SOFTWARE\Microsoft\Cryptography")
+            machineguid, _ = winreg.QueryValueEx(key, "MachineGuid")
+            return machineguid.strip()
+    except Exception:
+        pass
+    # Try Linux machine-id
+    try:
+        for path in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
+            if os.path.exists(path):
+                with open(path, "r") as f:
+                    return f.read().strip()
+    except Exception:
+        pass
+    # Fallback to MAC-based value (not perfect but usable)
+    mac = _uuid.getnode()
+    return f"{mac:x}"
+
+def verify_token(token):
+    try:
+        data = json.loads(f.decrypt(token.encode()).decode())
+    except Exception as e:
+        return False, "invalid token #3984"
+    # expiry check
+    try:
+        if datetime.datetime.now(datetime.timezone.utc) > datetime.datetime.strptime(data["expiry"], "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc):
+            return False, "invalid token #2934"
+    except Exception:
+        return False, "invalid token #3984"
+    # uuid check
+    sys_uuid = get_system_uuid()
+    if data.get("uuid") != sys_uuid:
+        return False, f"invalid token #9238"
+
+    secure_data = {k: v for k, v in data.items() if k != 'uuid'}
+    return True, secure_data
+
+
+def validate_license_key(license_key: str) -> Dict[str, Any]:
+    ok, info = verify_token(license_key)
+    if ok:
+        return {
+            'success': ok,
+            'data': info
+        }
+    else:
+        return {
+            'success': False,
+            'message': 'Invalid license key or license has expired'
+        }
+
+
+@app.post("/api/license/validate")
+async def validate_license(request: LicenseValidateRequest):
+    """
+    Validate license key.
+    Currently uses dummy validation - will be implemented later.
+    """
+    try:
+        result = validate_license_key(request.license_key)
+        return result
+    except Exception as e:
+        logger.error(f"License validation error: {str(e)}")
+        return {
+            'success': False,
+            'message': 'Failed to validate license'
+        }
+
 
 @app.get("/api/jobs")
 async def list_jobs():
@@ -233,6 +318,21 @@ async def list_jobs():
 
 @app.post("/api/jobs", status_code=201)
 async def create_job(request: CreateJobRequest, background_tasks: BackgroundTasks):
+    # Validate license if provided
+    if request.license_key:
+        validation_result = validate_license_key(request.license_key)
+        if not validation_result['success']:
+            raise HTTPException(
+                status_code=403, 
+                detail=validation_result.get('message', 'Invalid license key')
+            )
+        logger.info(f"License validated for: {validation_result['data']['name']}")
+    else:
+        raise HTTPException(
+                status_code=403, 
+                detail="License key is required"
+            )
+    
     # Configure proxy if provided
     if request.proxy:
         proxy_injector.configure_proxy(

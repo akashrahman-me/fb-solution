@@ -15,6 +15,9 @@ export const API_ENDPOINTS = {
     // Proxy
     PROXY_CONFIG: "/api/proxy/config",
 
+    // License
+    LICENSE_VALIDATE: "/api/license/validate",
+
     // Jobs (Current Job Management)
     JOBS: "/api/jobs", // POST - create job
     JOB_STATUS: (jobId: string) => `/api/jobs/${jobId}/status`,

@@ -35,7 +35,10 @@ export default function GeneratePage() {
             }
         }
 
-        startJob(phones, concurrency, headless, proxyConfig);
+        // Load license key from localStorage
+        const licenseKey = localStorage.getItem("fb-checker-license-key");
+
+        startJob(phones, concurrency, headless, proxyConfig, licenseKey || undefined);
     };
 
     const handleClear = () => {
