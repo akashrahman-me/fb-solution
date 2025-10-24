@@ -9,19 +9,17 @@ import CardContent from "@mui/material/CardContent";
 import Switch from "@mui/material/Switch";
 import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
-import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import Divider from "@mui/material/Divider";
-import CircularProgress from "@mui/material/CircularProgress";
 import {toast} from "react-toastify";
 import {useTheme} from "@/context/ThemeContext";
-import {getProxyConfig, setProxyConfig} from "@/services/api";
 import {ProxyConfig} from "@/types/api";
 
 export default function SettingsPage() {
     const {themeMode, setThemeMode} = useTheme();
     const [isLoaded, setIsLoaded] = useState(false);
     const [previousTheme, setPreviousTheme] = useState<string>(themeMode);
+    const [proxyConfigLoaded, setProxyConfigLoaded] = useState(false);
 
     // Proxy settings
     const [proxyConfig, setProxyConfigState] = useState<ProxyConfig>({
@@ -31,16 +29,14 @@ export default function SettingsPage() {
         username: "",
         password: "",
     });
-    const [proxyLoading, setProxyLoading] = useState(false);
 
-    // Load proxy configuration
+    // Load proxy configuration from localStorage only
     useEffect(() => {
         loadProxyConfig();
     }, []);
 
-    const loadProxyConfig = async () => {
+    const loadProxyConfig = () => {
         try {
-            // First, try to load from localStorage
             const localConfig = localStorage.getItem("fb-checker-proxy-config");
             if (localConfig) {
                 const parsed = JSON.parse(localConfig);
@@ -52,51 +48,20 @@ export default function SettingsPage() {
                     password: parsed.password ?? "",
                 });
             }
-
-            // Then sync with backend
-            const response = await getProxyConfig();
-            if (response.success && response.data) {
-                const config = {
-                    enabled: response.data.enabled ?? false,
-                    server: response.data.server ?? "",
-                    port: response.data.port ?? 8080,
-                    username: response.data.username ?? "",
-                    password: response.data.password ?? "",
-                };
-                setProxyConfigState(config);
-                // Save to localStorage
-                localStorage.setItem("fb-checker-proxy-config", JSON.stringify(config));
-            }
         } catch (error) {
             console.error("Error loading proxy config:", error);
-        }
-    };
-
-    const handleSaveProxy = async () => {
-        setProxyLoading(true);
-        try {
-            const response = await setProxyConfig(proxyConfig);
-            if (response.success) {
-                // Save to localStorage on success
-                localStorage.setItem("fb-checker-proxy-config", JSON.stringify(proxyConfig));
-                toast.success("Proxy configuration saved successfully");
-            } else {
-                toast.error(response.error || "Failed to save proxy configuration");
-            }
-        } catch (error) {
-            console.error("Error saving proxy config:", error);
-            toast.error("Failed to save proxy configuration");
         } finally {
-            setProxyLoading(false);
+            // Mark proxy config as loaded to enable auto-save
+            setProxyConfigLoaded(true);
         }
     };
 
-    // Auto-save proxy config to localStorage when it changes
+    // Auto-save proxy config to localStorage when it changes (after initial load)
     useEffect(() => {
-        if (isLoaded) {
+        if (proxyConfigLoaded) {
             localStorage.setItem("fb-checker-proxy-config", JSON.stringify(proxyConfig));
         }
-    }, [proxyConfig, isLoaded]);
+    }, [proxyConfig, proxyConfigLoaded]);
 
     // Load settings from localStorage on mount
     useEffect(() => {
@@ -254,19 +219,6 @@ export default function SettingsPage() {
                                                     size="small"
                                                     sx={{maxWidth: 400}}
                                                 />
-                                            </Box>
-
-                                            <Divider sx={{opacity: 0.5}} />
-
-                                            <Box sx={{display: "flex", gap: 2}}>
-                                                <Button
-                                                    variant="contained"
-                                                    onClick={handleSaveProxy}
-                                                    disabled={proxyLoading}
-                                                    startIcon={proxyLoading && <CircularProgress size={16} />}
-                                                >
-                                                    {proxyLoading ? "Saving..." : "Save Proxy"}
-                                                </Button>
                                             </Box>
                                         </>
                                     )}

@@ -38,6 +38,7 @@ export interface JobCreateRequest {
     phone_numbers: string[];
     workers: number;
     headless: boolean;
+    proxy?: ProxyConfig;
 }
 
 export interface JobCreateResponse {

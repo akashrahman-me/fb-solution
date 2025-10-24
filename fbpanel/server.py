@@ -104,6 +104,7 @@ class CreateJobRequest(BaseModel):
     phone_numbers: List[str] = Field(..., min_length=1, description="List of phone numbers to verify")
     workers: int = Field(default=5, ge=1, le=100, description="Number of concurrent workers")
     headless: bool = Field(default=False, description="Run browsers in headless mode")
+    proxy: Optional[ProxyConfig] = Field(default=None, description="Proxy configuration for this job")
 
     @field_validator('phone_numbers')
     @classmethod
@@ -205,44 +206,6 @@ async def get_status():
         'active_jobs': len([j for j in jobs.values() if j.status == 'running'])
     }
 
-@app.get("/api/proxy/config")
-async def get_proxy_config():
-    return {
-        'success': True,
-        'config': {
-            'enabled': proxy_injector.USE_PROXY,
-            'server': proxy_injector.REMOTE_SERVER,
-            'port': proxy_injector.REMOTE_PORT,
-            'username': proxy_injector.REMOTE_USERNAME,
-            'has_authentication': proxy_injector.PROXY_AUTH is not None
-        }
-    }
-
-
-@app.post("/api/proxy/config")
-async def set_proxy_config(config: ProxyConfig):
-    try:
-        proxy_injector.configure_proxy(
-            server=config.server if config.server else None,
-            port=config.port if config.port else None,
-            username=config.username if config.username else None,
-            password=config.password if config.password else None,
-            enabled=config.enabled
-        )
-
-        return {
-            'success': True,
-            'message': 'Proxy configuration updated successfully',
-            'config': {
-                'enabled': config.enabled,
-                'server': config.server if config.enabled else None,
-                'port': config.port if config.enabled else None,
-                'has_authentication': bool(config.username and config.password) if config.enabled else False
-            }
-        }
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
 
 @app.get("/api/jobs")
 async def list_jobs():
@@ -270,6 +233,17 @@ async def list_jobs():
 
 @app.post("/api/jobs", status_code=201)
 async def create_job(request: CreateJobRequest, background_tasks: BackgroundTasks):
+    # Configure proxy if provided
+    if request.proxy:
+        proxy_injector.configure_proxy(
+            server=request.proxy.server if request.proxy.server else None,
+            port=request.proxy.port if request.proxy.port else None,
+            username=request.proxy.username if request.proxy.username else None,
+            password=request.proxy.password if request.proxy.password else None,
+            enabled=request.proxy.enabled
+        )
+        logger.info(f"Proxy configured for job: enabled={request.proxy.enabled}")
+    
     job_id = str(uuid.uuid4())
     job = VerificationJob(job_id, request.phone_numbers, request.workers, request.headless)
 
@@ -277,6 +251,11 @@ async def create_job(request: CreateJobRequest, background_tasks: BackgroundTask
         jobs[job_id] = job
 
     job.add_log(f"Job created with {len(request.phone_numbers)} phone numbers, {request.workers} workers")
+    if request.proxy and request.proxy.enabled:
+        job.add_log(f"Proxy enabled: {request.proxy.server}:{request.proxy.port}")
+    else:
+        job.add_log("Direct connection mode (no proxy)")
+    
     background_tasks.add_task(run_verification_job, job_id)
 
     return {

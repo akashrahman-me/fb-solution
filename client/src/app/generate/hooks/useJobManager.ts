@@ -1,6 +1,7 @@
 import {useState, useRef, useEffect} from "react";
 import {toast} from "react-toastify";
 import {createJob, stopJob, streamJobProgress, pollJobStatus, getJobResults, getJobLogs} from "@/services/api";
+import {ProxyConfig} from "@/types/api";
 
 interface ResultItem {
     phone: string;
@@ -109,7 +110,7 @@ export function useJobManager() {
         }
     };
 
-    const startJob = async (phones: string[], concurrency: number, headless: boolean) => {
+    const startJob = async (phones: string[], concurrency: number, headless: boolean, proxy?: ProxyConfig) => {
         if (phones.length === 0) {
             toast.error("Please enter at least one phone number");
             return;
@@ -126,6 +127,7 @@ export function useJobManager() {
                 phone_numbers: phones,
                 workers: concurrency,
                 headless: headless,
+                proxy: proxy,
             });
 
             if (!response.success || !response.data) {

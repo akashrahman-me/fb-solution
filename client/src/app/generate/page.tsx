@@ -9,6 +9,7 @@ import ResultsPanel from "./components/ResultsPanel";
 import {useJobManager} from "./hooks/useJobManager";
 import {parsePhoneNumbers, countValidPhones} from "./utils/phoneUtils";
 import {useLocalStorage} from "@/hooks/useLocalStorage";
+import {ProxyConfig} from "@/types/api";
 
 export default function GeneratePage() {
     const [phoneNumbers, setPhoneNumbers] = useState("");
@@ -21,7 +22,20 @@ export default function GeneratePage() {
 
     const handleStart = () => {
         const phones = parsePhoneNumbers(phoneNumbers);
-        startJob(phones, concurrency, headless);
+
+        // Load proxy config from localStorage
+        const proxyConfigStr = localStorage.getItem("fb-checker-proxy-config");
+        let proxyConfig: ProxyConfig | undefined = undefined;
+
+        if (proxyConfigStr) {
+            try {
+                proxyConfig = JSON.parse(proxyConfigStr);
+            } catch (error) {
+                console.error("Failed to parse proxy config:", error);
+            }
+        }
+
+        startJob(phones, concurrency, headless, proxyConfig);
     };
 
     const handleClear = () => {
