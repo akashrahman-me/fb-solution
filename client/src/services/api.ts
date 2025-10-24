@@ -10,13 +10,10 @@ import {
     ProxyTestResponse,
     JobCreateRequest,
     JobCreateResponse,
-    Job,
     JobStatusResponse,
     JobResultsResponse,
     JobLogsResponse,
     JobStreamEvent,
-    JobsListResponse,
-    JobDetailResponse,
     ApiError,
     ApiResponse,
 } from "@/types/api";
@@ -107,25 +104,8 @@ export async function testProxyConnection(): Promise<ApiResponse<ProxyTestRespon
 }
 
 // ============================================================================
-// Jobs API
+// Jobs API (Current Job Management Only)
 // ============================================================================
-
-/**
- * Get all jobs
- */
-export async function getAllJobs(): Promise<ApiResponse<Job[]>> {
-    const response = await fetchApi<JobsListResponse>(API_ENDPOINTS.JOBS);
-    if (response.success && response.data) {
-        return {
-            success: true,
-            data: response.data.jobs,
-        };
-    }
-    return {
-        success: false,
-        error: response.error,
-    };
-}
 
 /**
  * Create a new job
@@ -135,23 +115,6 @@ export async function createJob(request: JobCreateRequest): Promise<ApiResponse<
         method: "POST",
         body: JSON.stringify(request),
     });
-}
-
-/**
- * Get job details
- */
-export async function getJobDetails(jobId: string): Promise<ApiResponse<Job>> {
-    const response = await fetchApi<JobDetailResponse>(API_ENDPOINTS.JOB_DETAIL(jobId));
-    if (response.success && response.data) {
-        return {
-            success: true,
-            data: response.data.job,
-        };
-    }
-    return {
-        success: false,
-        error: response.error,
-    };
 }
 
 /**
@@ -181,15 +144,6 @@ export async function getJobLogs(jobId: string): Promise<ApiResponse<JobLogsResp
 export async function stopJob(jobId: string): Promise<ApiResponse<{message: string}>> {
     return fetchApi<{message: string}>(API_ENDPOINTS.JOB_STOP(jobId), {
         method: "POST",
-    });
-}
-
-/**
- * Delete a job
- */
-export async function deleteJob(jobId: string): Promise<ApiResponse<{message: string}>> {
-    return fetchApi<{message: string}>(API_ENDPOINTS.JOB_DETAIL(jobId), {
-        method: "DELETE",
     });
 }
 

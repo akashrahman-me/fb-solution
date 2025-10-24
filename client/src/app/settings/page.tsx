@@ -20,10 +20,6 @@ import {ProxyConfig} from "@/types/api";
 
 export default function SettingsPage() {
     const {themeMode, setThemeMode} = useTheme();
-    const [autoCopy, setAutoCopy] = useState<boolean>(false);
-    const [saveHistory, setSaveHistory] = useState<boolean>(true);
-    const [showNotifications, setShowNotifications] = useState<boolean>(true);
-    const [defaultConcurrency, setDefaultConcurrency] = useState<number>(5);
     const [isLoaded, setIsLoaded] = useState(false);
     const [previousTheme, setPreviousTheme] = useState<string>(themeMode);
 
@@ -47,7 +43,13 @@ export default function SettingsPage() {
         try {
             const response = await getProxyConfig();
             if (response.success && response.data) {
-                setProxyConfigState(response.data);
+                setProxyConfigState({
+                    enabled: response.data.enabled ?? false,
+                    server: response.data.server ?? "",
+                    port: response.data.port ?? 8080,
+                    username: response.data.username ?? "",
+                    password: response.data.password ?? "",
+                });
             }
         } catch (error) {
             console.error("Error loading proxy config:", error);
@@ -95,15 +97,6 @@ export default function SettingsPage() {
     // Load settings from localStorage on mount
     useEffect(() => {
         if (typeof window !== "undefined") {
-            const savedAutoCopy = localStorage.getItem("autoCopy");
-            const savedHistory = localStorage.getItem("saveHistory");
-            const savedNotifications = localStorage.getItem("showNotifications");
-            const savedConcurrency = localStorage.getItem("defaultConcurrency");
-
-            setAutoCopy(savedAutoCopy === "true");
-            setSaveHistory(savedHistory !== null ? savedHistory === "true" : true);
-            setShowNotifications(savedNotifications !== null ? savedNotifications === "true" : true);
-            setDefaultConcurrency(savedConcurrency ? parseInt(savedConcurrency) : 5);
             setPreviousTheme(themeMode); // Set initial theme
             setIsLoaded(true);
         }
@@ -119,43 +112,6 @@ export default function SettingsPage() {
         }
     }, [themeMode, isLoaded, previousTheme]);
 
-    // Auto-save other settings
-    useEffect(() => {
-        if (isLoaded) {
-            localStorage.setItem("autoCopy", autoCopy.toString());
-        }
-    }, [autoCopy, isLoaded]);
-
-    useEffect(() => {
-        if (isLoaded) {
-            localStorage.setItem("saveHistory", saveHistory.toString());
-        }
-    }, [saveHistory, isLoaded]);
-
-    useEffect(() => {
-        if (isLoaded) {
-            localStorage.setItem("showNotifications", showNotifications.toString());
-        }
-    }, [showNotifications, isLoaded]);
-
-    useEffect(() => {
-        if (isLoaded) {
-            localStorage.setItem("defaultConcurrency", defaultConcurrency.toString());
-        }
-    }, [defaultConcurrency, isLoaded]);
-
-    const handleClearData = () => {
-        if (window.confirm("Are you sure you want to clear all data? This action cannot be undone.")) {
-            localStorage.clear();
-            toast.success("All data cleared successfully");
-            // Reload settings
-            setThemeMode("system");
-            setAutoCopy(false);
-            setSaveHistory(true);
-            setShowNotifications(true);
-            setDefaultConcurrency(5);
-        }
-    };
     return (
         <Box sx={{height: "100%", display: "flex", flexDirection: "column", overflow: "hidden"}}>
             <SimpleBar style={{maxHeight: "100%", height: "100%"}}>
@@ -172,78 +128,6 @@ export default function SettingsPage() {
                 {/* Settings Content */}
                 <Box sx={{px: 6, pb: 6, maxWidth: 900}}>
                     <Box sx={{display: "flex", flexDirection: "column", gap: 3}}>
-                        {/* General Settings */}
-                        <Card>
-                            <CardContent sx={{p: 4}}>
-                                <Typography variant="h6" sx={{fontWeight: 600, mb: 3, fontSize: "1rem"}}>
-                                    General Settings
-                                </Typography>
-
-                                <Box sx={{display: "flex", flexDirection: "column", gap: 0}}>
-                                    <Box
-                                        sx={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "space-between",
-                                            py: 2.5,
-                                        }}
-                                    >
-                                        <Box sx={{flex: 1}}>
-                                            <Typography variant="body1" sx={{fontWeight: 600, mb: 0.5}}>
-                                                Auto-copy OTP
-                                            </Typography>
-                                            <Typography variant="body2" sx={{color: "text.secondary", fontSize: "0.8125rem"}}>
-                                                Automatically copy generated OTP codes to your clipboard
-                                            </Typography>
-                                        </Box>
-                                        <Switch checked={autoCopy} onChange={(e) => setAutoCopy(e.target.checked)} />
-                                    </Box>
-
-                                    <Divider sx={{opacity: 0.5}} />
-
-                                    <Box
-                                        sx={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "space-between",
-                                            py: 2.5,
-                                        }}
-                                    >
-                                        <Box sx={{flex: 1}}>
-                                            <Typography variant="body1" sx={{fontWeight: 600, mb: 0.5}}>
-                                                Save History
-                                            </Typography>
-                                            <Typography variant="body2" sx={{color: "text.secondary", fontSize: "0.8125rem"}}>
-                                                Store generated OTP codes in application history
-                                            </Typography>
-                                        </Box>
-                                        <Switch checked={saveHistory} onChange={(e) => setSaveHistory(e.target.checked)} />
-                                    </Box>
-
-                                    <Divider sx={{opacity: 0.5}} />
-
-                                    <Box
-                                        sx={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "space-between",
-                                            py: 2.5,
-                                        }}
-                                    >
-                                        <Box sx={{flex: 1}}>
-                                            <Typography variant="body1" sx={{fontWeight: 600, mb: 0.5}}>
-                                                Show Notifications
-                                            </Typography>
-                                            <Typography variant="body2" sx={{color: "text.secondary", fontSize: "0.8125rem"}}>
-                                                Display system notifications for important events
-                                            </Typography>
-                                        </Box>
-                                        <Switch checked={showNotifications} onChange={(e) => setShowNotifications(e.target.checked)} />
-                                    </Box>
-                                </Box>
-                            </CardContent>
-                        </Card>
-
                         {/* Appearance */}
                         <Card>
                             <CardContent sx={{p: 4}}>
@@ -390,56 +274,6 @@ export default function SettingsPage() {
                                             </Box>
                                         </>
                                     )}
-                                </Box>
-                            </CardContent>
-                        </Card>
-
-                        {/* Advanced */}
-                        <Card>
-                            <CardContent sx={{p: 4}}>
-                                <Typography variant="h6" sx={{fontWeight: 600, mb: 3, fontSize: "1rem"}}>
-                                    Advanced
-                                </Typography>
-
-                                <Box sx={{display: "flex", flexDirection: "column", gap: 2.5}}>
-                                    <Box>
-                                        <Typography variant="body2" sx={{fontWeight: 600, mb: 1.5, fontSize: "0.8125rem"}}>
-                                            Default Concurrency
-                                        </Typography>
-                                        <Select
-                                            fullWidth
-                                            value={defaultConcurrency}
-                                            onChange={(e) => setDefaultConcurrency(e.target.value as number)}
-                                            size="small"
-                                            sx={{maxWidth: 300}}
-                                        >
-                                            <MenuItem value={1}>1 Thread</MenuItem>
-                                            <MenuItem value={3}>3 Threads</MenuItem>
-                                            <MenuItem value={5}>5 Threads</MenuItem>
-                                            <MenuItem value={10}>10 Threads</MenuItem>
-                                            <MenuItem value={20}>20 Threads</MenuItem>
-                                        </Select>
-                                        <Typography
-                                            variant="caption"
-                                            sx={{color: "text.secondary", display: "block", mt: 1, fontSize: "0.75rem"}}
-                                        >
-                                            Number of concurrent OTP generation operations
-                                        </Typography>
-                                    </Box>
-
-                                    <Divider sx={{opacity: 0.5}} />
-
-                                    <Box>
-                                        <Button variant="outlined" color="error" fullWidth sx={{maxWidth: 300}} onClick={handleClearData}>
-                                            Clear All Data
-                                        </Button>
-                                        <Typography
-                                            variant="caption"
-                                            sx={{color: "text.secondary", display: "block", mt: 1, fontSize: "0.75rem"}}
-                                        >
-                                            Remove all saved history and application data
-                                        </Typography>
-                                    </Box>
                                 </Box>
                             </CardContent>
                         </Card>

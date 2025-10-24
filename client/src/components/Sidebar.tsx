@@ -2,7 +2,7 @@
 import React from "react";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
-import {HiSquares2X2, HiLockClosed, HiClock, HiCog6Tooth, HiBriefcase} from "react-icons/hi2";
+import {HiSquares2X2, HiLockClosed, HiCog6Tooth} from "react-icons/hi2";
 import Box from "@mui/material/Box";
 import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
@@ -24,16 +24,6 @@ export default function Sidebar() {
             name: "Phone Checker",
             path: "/generate",
             icon: HiLockClosed,
-        },
-        {
-            name: "Jobs",
-            path: "/jobs",
-            icon: HiBriefcase,
-        },
-        {
-            name: "History",
-            path: "/history",
-            icon: HiClock,
         },
         {
             name: "Settings",

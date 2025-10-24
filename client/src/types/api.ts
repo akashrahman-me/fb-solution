@@ -122,17 +122,6 @@ export interface JobStreamEvent {
     failed_count: number;
 }
 
-export interface JobsListResponse {
-    success: boolean;
-    jobs: Job[];
-    total: number;
-}
-
-export interface JobDetailResponse {
-    success: boolean;
-    job: Job;
-}
-
 // ============================================================================
 // Error Response
 // ============================================================================

@@ -394,11 +394,27 @@ class ProxyThread(threading.Thread):
             self.url = self.extract_url(request_str)
             self.bytes_sent += len(request)
 
+            if USE_PROXY and REMOTE_SERVER and REMOTE_PORT:
+                # Proxy mode: Forward to upstream proxy
+                self.handle_proxy_mode(request, request_str)
+            else:
+                # Direct mode: Connect directly to target server
+                self.handle_direct_mode(request, request_str)
+                
+        except Exception as e:
+            pass
+        finally:
+            self.client.close()
+            self.print_stats()
+
+    def handle_proxy_mode(self, request, request_str):
+        """Handle request by forwarding to upstream proxy"""
+        try:
             # Add Proxy-Authorization header if not present
             lines = request_str.split('\r\n')
             has_proxy_auth = any('Proxy-Authorization' in line for line in lines)
 
-            if not has_proxy_auth:
+            if PROXY_AUTH and not has_proxy_auth:
                 # Insert Proxy-Authorization after the first line
                 lines.insert(1, f'Proxy-Authorization: Basic {PROXY_AUTH}')
                 request_str = '\r\n'.join(lines)
@@ -428,9 +444,78 @@ class ProxyThread(threading.Thread):
                 
         except Exception as e:
             pass
-        finally:
-            self.client.close()
-            self.print_stats()
+
+    def handle_direct_mode(self, request, request_str):
+        """Handle request by connecting directly to target server"""
+        try:
+            lines = request_str.split('\r\n')
+            if not lines:
+                return
+
+            first_line = lines[0]
+            parts = first_line.split(' ')
+            if len(parts) < 2:
+                return
+
+            method = parts[0]
+            url = parts[1]
+
+            # Extract target host and port
+            target_host = None
+            target_port = 80
+
+            if method == 'CONNECT':
+                # HTTPS CONNECT request
+                if ':' in url:
+                    target_host, port_str = url.split(':', 1)
+                    target_port = int(port_str)
+                else:
+                    target_host = url
+                    target_port = 443
+            else:
+                # HTTP request - extract host from headers
+                for line in lines[1:]:
+                    if line.lower().startswith('host:'):
+                        host_value = line.split(':', 1)[1].strip()
+                        if ':' in host_value:
+                            target_host, port_str = host_value.split(':', 1)
+                            target_port = int(port_str)
+                        else:
+                            target_host = host_value
+                            target_port = 80
+                        break
+
+            if not target_host:
+                self.client.send(b"HTTP/1.1 400 Bad Request\r\n\r\n")
+                return
+
+            # Connect directly to target server
+            target = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            target.settimeout(10)
+
+            try:
+                target.connect((target_host, target_port))
+
+                if method == 'CONNECT':
+                    # For HTTPS, send connection established and relay
+                    self.client.send(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                    self.relay_data(self.client, target)
+                else:
+                    # For HTTP, forward the request
+                    target.sendall(request)
+                    self.relay_data(self.client, target)
+
+            except socket.timeout:
+                self.client.send(b"HTTP/1.1 504 Gateway Timeout\r\n\r\n")
+            except ConnectionRefusedError:
+                self.client.send(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
+            except Exception as e:
+                self.client.send(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
+            finally:
+                target.close()
+
+        except Exception as e:
+            pass
 
     def extract_url(self, request_str):
         """Extract URL from HTTP request"""

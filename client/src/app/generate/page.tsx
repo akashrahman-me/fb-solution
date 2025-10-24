@@ -1,5 +1,5 @@
 "use client";
-import React, {useState} from "react";
+import React from "react";
 import {toast} from "react-toastify";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -8,11 +8,12 @@ import PhoneNumberInput from "./components/PhoneNumberInput";
 import ResultsPanel from "./components/ResultsPanel";
 import {useJobManager} from "./hooks/useJobManager";
 import {parsePhoneNumbers, countValidPhones} from "./utils/phoneUtils";
+import {useLocalStorage} from "@/hooks/useLocalStorage";
 
 export default function GeneratePage() {
-    const [phoneNumbers, setPhoneNumbers] = useState("");
-    const [concurrency, setConcurrency] = useState(5);
-    const [headless, setHeadless] = useState(true);
+    const [phoneNumbers, setPhoneNumbers] = useLocalStorage("fb-checker-phone-numbers", "");
+    const [concurrency, setConcurrency] = useLocalStorage("fb-checker-concurrency", 5);
+    const [headless, setHeadless] = useLocalStorage("fb-checker-headless", true);
 
     const {results, logs, isRunning, progress, startJob, stopCurrentJob, clearResults} = useJobManager();
 
