@@ -22,10 +22,10 @@ export interface StatusResponse {
 
 export interface ProxyConfig {
     enabled: boolean;
-    server: string;
-    port: number;
-    username?: string;
-    password?: string;
+    server?: string | null;
+    port?: number | null;
+    username?: string | null;
+    password?: string | null;
 }
 
 // ============================================================================

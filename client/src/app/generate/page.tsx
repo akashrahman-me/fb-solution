@@ -29,7 +29,16 @@ export default function GeneratePage() {
 
         if (proxyConfigStr) {
             try {
-                proxyConfig = JSON.parse(proxyConfigStr);
+                const parsed = JSON.parse(proxyConfigStr);
+                // Ensure proper format - convert empty strings to null
+                proxyConfig = {
+                    enabled: Boolean(parsed.enabled),
+                    server: parsed.server || null,
+                    port: parsed.port ? Number(parsed.port) : null,
+                    username: parsed.username || null,
+                    password: parsed.password || null,
+                };
+                console.log("Proxy config loaded:", proxyConfig);
             } catch (error) {
                 console.error("Failed to parse proxy config:", error);
             }
@@ -37,8 +46,14 @@ export default function GeneratePage() {
 
         // Load license key from localStorage
         const licenseKey = localStorage.getItem("fb-checker-license-key");
+        console.log("License key loaded:", licenseKey ? "Present" : "Missing");
 
-        startJob(phones, concurrency, headless, proxyConfig, licenseKey || undefined);
+        if (!licenseKey) {
+            toast.error("License key is required. Please configure it in Settings.");
+            return;
+        }
+
+        startJob(phones, concurrency, headless, proxyConfig, licenseKey);
     };
 
     const handleClear = () => {
@@ -52,7 +67,7 @@ export default function GeneratePage() {
             {/* Header */}
             <Box sx={{px: 6, pt: 5, pb: 3}}>
                 <Typography variant="h4" sx={{fontWeight: 700, mb: 1, letterSpacing: "-0.02em"}}>
-                    Phone Checker
+                    Phone Checker /+
                 </Typography>
                 <Typography variant="body2" sx={{color: "text.secondary"}}>
                     Check if phone numbers are registered on Facebook with advanced concurrency control

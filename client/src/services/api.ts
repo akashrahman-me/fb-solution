@@ -13,7 +13,6 @@ import {
     JobResultsResponse,
     JobLogsResponse,
     JobStreamEvent,
-    ApiError,
     ApiResponse,
     LicenseValidateResponse,
 } from "@/types/api";
@@ -30,17 +29,38 @@ async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<Api
     try {
         const response = await fetch(getApiUrl(endpoint), {
             ...options,
+            mode: "cors", // Explicitly set CORS mode
             headers: {
                 "Content-Type": "application/json",
+                Accept: "application/json",
                 ...options?.headers,
             },
+            // Don't include credentials since we don't use authentication
+            credentials: "omit",
         });
 
         if (!response.ok) {
-            const error: ApiError = await response.json();
+            let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
+            try {
+                const errorData = await response.json();
+                console.error("API Error Response:", errorData);
+                errorDetail = errorData.detail || errorDetail;
+
+                // If it's a validation error, provide more details
+                if (response.status === 422 && errorData.detail && Array.isArray(errorData.detail)) {
+                    const validationErrors = errorData.detail
+                        .map((err: {loc: string[]; msg: string}) => `${err.loc.join(".")}: ${err.msg}`)
+                        .join(", ");
+                    errorDetail = `Validation Error: ${validationErrors}`;
+                }
+            } catch (e) {
+                // If error response isn't JSON, use the status text
+                console.error("Failed to parse error response:", e);
+            }
+
             return {
                 success: false,
-                error: error.detail || `HTTP ${response.status}: ${response.statusText}`,
+                error: errorDetail,
             };
         }
 
@@ -50,6 +70,7 @@ async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<Api
             data,
         };
     } catch (error) {
+        console.error("Fetch error:", error);
         return {
             success: false,
             error: error instanceof Error ? error.message : "Unknown error occurred",

@@ -123,6 +123,14 @@ export function useJobManager() {
         toast.info("Creating job...");
 
         try {
+            console.log("Creating job with:", {
+                phone_count: phones.length,
+                workers: concurrency,
+                headless,
+                proxy_enabled: proxy?.enabled,
+                has_license: !!licenseKey,
+            });
+
             const response = await createJob({
                 phone_numbers: phones,
                 workers: concurrency,
@@ -131,8 +139,12 @@ export function useJobManager() {
                 license_key: licenseKey,
             });
 
+            console.log("Job creation response:", response);
+
             if (!response.success || !response.data) {
-                throw new Error(response.error || "Failed to create job");
+                const errorMsg = response.error || "Failed to create job";
+                console.error("Job creation failed:", errorMsg);
+                throw new Error(errorMsg);
             }
 
             const jobId = response.data.job_id;
@@ -164,7 +176,8 @@ export function useJobManager() {
             );
         } catch (error) {
             console.error("Error starting job:", error);
-            toast.error(error instanceof Error ? error.message : "Failed to start job");
+            const errorMessage = error instanceof Error ? error.message : "Failed to start job";
+            toast.error(errorMessage);
             setIsRunning(false);
         }
     };

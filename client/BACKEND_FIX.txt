@@ -1,0 +1,95 @@
+// Quick fix for startBackend function
+// Replace lines 150-193 in main.js with this improved version
+
+// Start Python backend
+function startBackend() {
+    if (isDev) {
+        console.log("Development mode: Assuming backend is running separately");
+        return;
+    }
+
+    const backendPath = path.join(process.resourcesPath, "backend", "fb-backend.exe");
+
+    console.log("=== BACKEND DEBUG START ===");
+    console.log("Backend path:", backendPath);
+    console.log("resourcesPath:", process.resourcesPath);
+    console.log("__dirname:", __dirname);
+    console.log("app.getAppPath():", app.getAppPath());
+    
+    if (!fs.existsSync(backendPath)) {
+        console.error("Backend NOT FOUND at:", backendPath);
+        
+        // Check alternative paths
+        const altPath1 = path.join(__dirname, "backend", "fb-backend.exe");
+        const altPath2 = path.join(app.getAppPath(), "backend", "fb-backend.exe");
+        
+        console.log("Trying alternative path 1:", altPath1);
+        console.log("  Exists:", fs.existsSync(altPath1));
+        console.log("Trying alternative path 2:", altPath2);
+        console.log("  Exists:", fs.existsSync(altPath2));
+        
+        // List what's in resources folder
+        try {
+            const resourcesContents = fs.readdirSync(process.resourcesPath);
+            console.log("Contents of resources folder:", resourcesContents);
+        } catch (e) {
+            console.error("Cannot read resources folder:", e);
+        }
+        
+        dialog.showErrorBox("Backend Missing", 
+            `Backend not found!\n\nExpected: ${backendPath}\n\nCheck console for details.`
+        );
+        return;
+    }
+    
+    console.log("Backend FOUND!");
+    console.log("Starting backend process...");
+
+    try {
+        backendProcess = spawn(backendPath, [], {
+            stdio: ["ignore", "pipe", "pipe"],
+            cwd: path.dirname(backendPath),
+            windowsHide: true,
+        });
+
+        console.log("Backend spawned! PID:", backendProcess.pid);
+
+        backendProcess.stdout.on("data", (data) => {
+            console.log("[Backend OUT]", data.toString().trim());
+        });
+
+        backendProcess.stderr.on("data", (data) => {
+            console.error("[Backend ERR]", data.toString().trim());
+        });
+
+        backendProcess.on("error", (error) => {
+            console.error("[Backend ERROR]", error);
+            dialog.showErrorBox("Backend Error", `${error.message}`);
+        });
+
+        backendProcess.on("spawn", () => {
+            console.log("Backend spawn event fired!");
+        });
+
+        backendProcess.on("close", (code, signal) => {
+            console.log(`Backend closed: code=${code}, signal=${signal}`);
+            if (code !== 0 && code !== null) {
+                dialog.showErrorBox("Backend Crashed", `Exit code: ${code}`);
+            }
+        });
+
+        // Check status after 3 seconds
+        setTimeout(() => {
+            console.log("Backend check after 3s:");
+            console.log("  Process exists:", !!backendProcess);
+            console.log("  Process killed:", backendProcess?.killed);
+            console.log("  Process PID:", backendProcess?.pid);
+        }, 3000);
+
+    } catch (error) {
+        console.error("SPAWN FAILED:", error);
+        dialog.showErrorBox("Spawn Error", error.message);
+    }
+    
+    console.log("=== BACKEND DEBUG END ===");
+}

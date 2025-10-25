@@ -3,8 +3,8 @@
  * Manages base URL and API endpoints for the Facebook Checker REST API
  */
 
-// API base URL - defaults to localhost:8000
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// API base URL - Use 127.0.0.1 to avoid CORS issues with localhost vs 127.0.0.1
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 // API endpoints
 export const API_ENDPOINTS = {

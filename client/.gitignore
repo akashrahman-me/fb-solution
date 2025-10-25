@@ -43,3 +43,6 @@ next-env.d.ts
 # electron
 /dist
 *.log
+
+# backend executable (build artifact)
+/backend
