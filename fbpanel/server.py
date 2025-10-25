@@ -44,13 +44,47 @@ async def lifespan(app: FastAPI):
     logger.info("Starting API Server...")
     ensure_directories()
 
-    proxy_thread = threading.Thread(
-        target=proxy_injector.start_proxy_server,
-        args=(9080, 9081),
-        daemon=True
-    )
-    proxy_thread.start()
-    await asyncio.sleep(1)
+    # Start proxy server with better error handling
+    proxy_started = False
+    try:
+        logger.info("Starting proxy injector on ports 9080/9081...")
+        
+        # Start proxy in a separate thread
+        proxy_thread = threading.Thread(
+            target=lambda: safe_start_proxy_server(9080, 9081),
+            daemon=True,
+            name="ProxyInjectorThread"
+        )
+        proxy_thread.start()
+        
+        # Wait longer and verify it started
+        await asyncio.sleep(3)
+        
+        # Test if proxy is responding
+        import socket
+        test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        test_socket.settimeout(2)
+        result = test_socket.connect_ex(('127.0.0.1', 9080))
+        test_socket.close()
+        
+        if result == 0:
+            logger.info("✅ Proxy injector started successfully and responding on port 9080")
+            proxy_started = True
+        else:
+            logger.error("❌ Proxy injector is not responding on port 9080")
+            logger.warning("⚠️ Browsers will use direct connection without proxy")
+            
+    except Exception as e:
+        logger.error(f"❌ Failed to start proxy injector: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.warning("⚠️ Continuing without proxy - browsers will use direct connection")
+    
+    if not proxy_started:
+        logger.warning("=" * 50)
+        logger.warning("WARNING: Proxy injector failed to start!")
+        logger.warning("The application will work but without proxy support.")
+        logger.warning("=" * 50)
     
     logger.info("API Server ready at http://localhost:8000")
 
@@ -64,6 +98,17 @@ async def lifespan(app: FastAPI):
                 job.status = 'stopped'
 
 
+def safe_start_proxy_server(proxy_port, stats_port):
+    """Safely start proxy server with error handling"""
+    try:
+        logger.info(f"Proxy thread starting on ports {proxy_port}/{stats_port}")
+        proxy_injector.start_proxy_server(proxy_port, stats_port)
+    except Exception as e:
+        logger.error(f"❌ Proxy server thread error: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+
+
 app = FastAPI(
     title="Facebook Account Checker API",
     description="REST API for phone number verification on Facebook",
@@ -73,13 +118,31 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Configure CORS - allow all local origins without credentials
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",  # Allow localhost and 127.0.0.1 with any port
+    allow_credentials=True,  # No credentials needed
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["Content-Type", "Accept", "Authorization"],
+    expose_headers=["*"],
+    max_age=3600,
 )
+
+# Add global exception handler for better error responses
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Global exception handler caught: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": str(exc),
+            "type": type(exc).__name__
+        }
+    )
 
 
 class ProxyConfig(BaseModel):
@@ -332,14 +395,18 @@ async def create_job(request: CreateJobRequest, background_tasks: BackgroundTask
     
     # Configure proxy if provided
     if request.proxy:
-        proxy_injector.configure_proxy(
-            server=request.proxy.server if request.proxy.server else None,
-            port=request.proxy.port if request.proxy.port else None,
-            username=request.proxy.username if request.proxy.username else None,
-            password=request.proxy.password if request.proxy.password else None,
-            enabled=request.proxy.enabled
-        )
-        logger.info(f"Proxy configured for job: enabled={request.proxy.enabled}")
+        try:
+            proxy_injector.configure_proxy(
+                server=request.proxy.server if request.proxy.server else None,
+                port=request.proxy.port if request.proxy.port else None,
+                username=request.proxy.username if request.proxy.username else None,
+                password=request.proxy.password if request.proxy.password else None,
+                enabled=request.proxy.enabled
+            )
+            logger.info(f"Proxy configured for job: enabled={request.proxy.enabled}")
+        except Exception as e:
+            logger.error(f"Error configuring proxy: {e}")
+            # Continue anyway - proxy is optional
     
     job_id = str(uuid.uuid4())
     job = VerificationJob(job_id, request.phone_numbers, request.workers, request.headless)
@@ -576,11 +643,44 @@ def run_verification_job(job_id: str):
 
 if __name__ == '__main__':
     import uvicorn
-
-    uvicorn.run(
-        "server:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=False,
-        log_level="info"
-    )
+    
+    # Always use port 8000 - frontend expects this exact port
+    PORT = 8000
+    
+    try:
+        logger.info(f"Starting server on port {PORT}")
+        
+        uvicorn.run(
+            "server:app",
+            host="0.0.0.0",
+            port=PORT,
+            reload=False,
+            log_level="info"
+        )
+    except OSError as e:
+        if e.errno == 10013:  # Access denied
+            logger.error(f"❌ Port {PORT} access denied. Run as Administrator or check firewall settings.")
+            print(f"\n{'='*60}")
+            print(f"ERROR: Cannot bind to port {PORT}")
+            print(f"Port {PORT} access is denied by Windows.")
+            print(f"\nPossible solutions:")
+            print(f"1. Run this program as Administrator")
+            print(f"2. Check Windows Firewall settings")
+            print(f"3. Make sure no other program is using port {PORT}")
+            print(f"{'='*60}\n")
+        elif e.errno == 10048:  # Address already in use
+            logger.error(f"❌ Port {PORT} is already in use by another application.")
+            print(f"\n{'='*60}")
+            print(f"ERROR: Port {PORT} is already in use")
+            print(f"Another application is using port {PORT}.")
+            print(f"\nPlease close the other application or use Task Manager to find it:")
+            print(f"  netstat -ano | findstr :{PORT}")
+            print(f"{'='*60}\n")
+        else:
+            logger.error(f"Failed to start server: {e}")
+            print(f"ERROR: Failed to start server: {e}")
+        input("Press Enter to exit...")
+    except Exception as e:
+        logger.error(f"Failed to start server: {e}")
+        print(f"ERROR: Failed to start server: {e}")
+        input("Press Enter to exit...")

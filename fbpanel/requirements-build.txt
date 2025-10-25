@@ -1,0 +1,2 @@
+# Backend Build Requirements
+pyinstaller>=6.0.0

@@ -12,6 +12,15 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
 from datetime import datetime
 from collections import deque
+import logging
+
+# Setup logging for proxy
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(asctime)s - PROXY - %(levelname)s - %(message)s'))
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
 
 # --- Configuration ---
 LOCAL_PROXY_HOST = "127.0.0.1"
@@ -43,6 +52,8 @@ def configure_proxy(server=None, port=None, username=None, password=None, enable
     """
     global REMOTE_SERVER, REMOTE_PORT, REMOTE_USERNAME, REMOTE_PASSWORD, PROXY_AUTH, USE_PROXY
 
+    logger.info(f"🔧 Configuring proxy: enabled={enabled}, server={server}, port={port}")
+    
     USE_PROXY = enabled
 
     if enabled and server and port:
@@ -630,20 +641,25 @@ def start_proxy_server(proxy_port=None, stats_port=None):
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     try:
+        # Try to bind to the port
         server.bind((LOCAL_PROXY_HOST, LOCAL_PROXY_PORT))
         server.listen(100)
 
-        print(f"✓ Proxy server started on {LOCAL_PROXY_HOST}:{LOCAL_PROXY_PORT}")
+        logger.info(f"✓ Proxy server started on {LOCAL_PROXY_HOST}:{LOCAL_PROXY_PORT}")
         if USE_PROXY and REMOTE_SERVER:
-            print(f"✓ Forwarding to: {REMOTE_SERVER}:{REMOTE_PORT}")
+            logger.info(f"✓ Forwarding to: {REMOTE_SERVER}:{REMOTE_PORT}")
         else:
-            print(f"✓ Direct connection mode (no upstream proxy)")
+            logger.info(f"✓ Direct connection mode (no upstream proxy)")
 
-        # Start stats server in a separate thread
-        stats_thread = threading.Thread(target=start_stats_server, daemon=True)
-        stats_thread.start()
+        # Start stats server in a separate thread with error handling
+        try:
+            stats_thread = threading.Thread(target=start_stats_server, daemon=True)
+            stats_thread.start()
+            logger.info(f"✓ Stats server starting on {LOCAL_PROXY_HOST}:{STATS_SERVER_PORT}")
+        except Exception as e:
+            logger.warning(f"⚠ Warning: Stats server failed to start: {e}")
 
-        print(f"✓ Press Ctrl+C to stop\n")
+        logger.info(f"✓ Proxy ready for connections\n")
 
         while True:
             client_socket, client_address = server.accept()
@@ -651,12 +667,26 @@ def start_proxy_server(proxy_port=None, stats_port=None):
             proxy_thread.start()
 
     except KeyboardInterrupt:
-        print("\n\nShutting down proxy server...")
+        logger.info("\n\nShutting down proxy server...")
+    except OSError as e:
+        if e.errno == 10048:  # Windows: Address already in use
+            logger.error(f"❌ Port {LOCAL_PROXY_PORT} is already in use!")
+            logger.error(f"   Please close any application using port {LOCAL_PROXY_PORT} or use a different port.")
+        elif e.errno == 98:  # Linux: Address already in use
+            logger.error(f"❌ Port {LOCAL_PROXY_PORT} is already in use!")
+            logger.error(f"   Please close any application using port {LOCAL_PROXY_PORT} or use a different port.")
+        else:
+            logger.error(f"❌ Network error: {e}")
     except Exception as e:
-        print(f"Error starting proxy server: {e}")
+        logger.error(f"❌ Error starting proxy server: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
     finally:
-        server.close()
-        print("Proxy server stopped.")
+        try:
+            server.close()
+        except:
+            pass
+        logger.info("Proxy server stopped.")
 
 
 def open_proxy_settings_dialog():

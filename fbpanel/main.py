@@ -13,6 +13,7 @@ from playwright.sync_api import sync_playwright
 import logging
 import shutil
 import random
+import sys
 
 from utils.normalize_text import normalize_text
 import proxy_injector
@@ -20,6 +21,21 @@ import proxy_injector
 # ============================================================================
 # CONFIGURATION & SETUP
 # ============================================================================
+
+# Configure Playwright browsers path before anything else
+# This is critical for PyInstaller .exe to find browsers
+if getattr(sys, 'frozen', False):
+    # Running as compiled .exe - browsers are bundled with the exe
+    # PyInstaller extracts to _MEIPASS temporary directory
+    base_path = sys._MEIPASS
+    BROWSERS_PATH = os.path.join(base_path, 'playwright-browsers')
+    logger_setup = logging.getLogger(__name__)
+    logger_setup.info(f"Running as .exe, browsers path: {BROWSERS_PATH}")
+else:
+    # Running as script - use local directory
+    BROWSERS_PATH = os.path.join(os.getcwd(), 'playwright-browsers')
+
+os.environ['PLAYWRIGHT_BROWSERS_PATH'] = BROWSERS_PATH
 
 # Logging setup
 logging.basicConfig(
@@ -69,7 +85,11 @@ def start_proxy_server():
             return
 
         logger.info("Starting proxy server in background...")
-        _proxy_thread = threading.Thread(target=proxy_injector.start_proxy_server, daemon=True)
+        _proxy_thread = threading.Thread(
+            target=proxy_injector.start_proxy_server, 
+            args=(9080, 9081),  # Use consistent ports
+            daemon=True
+        )
         _proxy_thread.start()
         _proxy_started = True
 
@@ -625,9 +645,9 @@ def process_phone_numbers(phone_numbers, num_workers=1, headless=False, callback
     Returns:
         List of results dictionaries
     """
-    # Start proxy server in background
-    start_proxy_server()
-
+    # Don't start proxy here - it's already started by server.py
+    # The proxy is managed centrally by the FastAPI server
+    
     ensure_directories()
 
     # Create queue and add phone numbers
